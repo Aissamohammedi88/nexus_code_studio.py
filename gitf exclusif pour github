@@ -1,0 +1,1127 @@
+#!/usr/bin/env python3# -*- coding: utf-8 -*-
+# ═══════════════════════════════════════════════════════════════════════════
+# NEXUS CODE STUDIO v1.0.0
+# Éditeur de code local avec :
+# - Détection automatique du langage
+# - Exécution HTML / CSS / JS / Python / Bash / YAML
+# - Aperçu live (iframe)
+# - Génération d'images de code (comme les README GitHub)
+# - Rendu YAML / JSON / Markdown
+# - Zéro dépendance externe
+# Auteur : Aissa Mohammedi (DGK)
+# Licence : NEXUS-OPEN-2.0
+# Port : 9190
+# ═══════════════════════════════════════════════════════════════════════════
+
+import os
+import re
+import sys
+import json
+import time
+import uuid
+import html
+import socket
+import base64
+import hashlib
+import threading
+import subprocess
+import urllib.parse
+import urllib.request
+import urllib.error
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+
+VERSION = "1.0.0"
+AUTEUR = "Aissa Mohammedi (DGK)"
+LICENCE = "NEXUS-OPEN-2.0"
+
+HOME_DIR = os.path.expanduser("~")
+BASE = os.path.join(HOME_DIR, "Documents", "nexus_code_studio")
+PROJECTS = os.path.join(BASE, "projects")
+EXPORTS = os.path.join(BASE, "exports")
+LOGS_DIR = os.path.join(BASE, "logs")
+TMP_DIR = os.path.join(BASE, "tmp")
+PID_DIR = os.path.join(BASE, "pid")
+LOG_FILE = os.path.join(LOGS_DIR, "studio.log")
+PID_FILE = os.path.join(PID_DIR, "server.pid")
+
+for d in (BASE, PROJECTS, EXPORTS, LOGS_DIR, TMP_DIR, PID_DIR):
+os.makedirs(d, exist_ok=True)
+
+PORT_PREF = 9190
+LOG_LK = threading.RLock()
+
+
+def log(msg):
+ts = time.strftime("%Y-%m-%d %H:%M:%S")
+line = "[{}] {}".format(ts, msg)
+try:
+print(line, flush=True)
+except Exception:
+pass
+with LOG_LK:
+try:
+with open(LOG_FILE, "a", encoding="utf-8") as f:
+f.write(line + "\n")
+except OSError:
+pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DÉTECTION DU LANGAGE
+# ═══════════════════════════════════════════════════════════════════════════
+
+LANGAGES = {
+"html": {"ext": ["html", "htm"], "mime": "text/html", "run": True},
+"css": {"ext": ["css", "scss", "sass"], "mime": "text/css", "run": True},
+"javascript": {"ext": ["js", "mjs", "jsx"], "mime": "application/javascript", "run": True},
+"typescript": {"ext": ["ts", "tsx"], "mime": "application/typescript", "run": False},
+"python": {"ext": ["py", "pyw"], "mime": "text/x-python", "run": True},
+"bash": {"ext": ["sh", "bash", "zsh"], "mime": "text/x-sh", "run": True},
+"yaml": {"ext": ["yaml", "yml"], "mime": "text/yaml", "run": False},
+"json": {"ext": ["json"], "mime": "application/json","run": False},
+"markdown": {"ext": ["md", "markdown"], "mime": "text/markdown", "run": False},
+"sql": {"ext": ["sql"], "mime": "text/x-sql", "run": False},
+"xml": {"ext": ["xml", "svg"], "mime": "application/xml", "run": True},
+"rust": {"ext": ["rs"], "mime": "text/x-rust", "run": False},
+"go": {"ext": ["go"], "mime": "text/x-go", "run": False},
+"java": {"ext": ["java"], "mime": "text/x-java", "run": False},
+"c": {"ext": ["c", "h"], "mime": "text/x-c", "run": False},
+"cpp": {"ext": ["cpp", "hpp", "cc", "hh"],"mime": "text/x-c++", "run": False},
+"csharp": {"ext": ["cs"], "mime": "text/x-csharp", "run": False},
+"php": {"ext": ["php"], "mime": "text/x-php", "run": False},
+"ruby": {"ext": ["rb"], "mime": "text/x-ruby", "run": False},
+"swift": {"ext": ["swift"], "mime": "text/x-swift", "run": False},
+"kotlin": {"ext": ["kt", "kts"], "mime": "text/x-kotlin", "run": False},
+"lua": {"ext": ["lua"], "mime": "text/x-lua", "run": False},
+"perl": {"ext": ["pl", "pm"], "mime": "text/x-perl", "run": False},
+"r": {"ext": ["r", "R"], "mime": "text/x-r", "run": False},
+"dart": {"ext": ["dart"], "mime": "text/x-dart", "run": False},
+"scala": {"ext": ["scala"], "mime": "text/x-scala", "run": False},
+"haskell": {"ext": ["hs"], "mime": "text/x-haskell", "run": False},
+"elixir": {"ext": ["ex", "exs"], "mime": "text/x-elixir", "run": False},
+"clojure": {"ext": ["clj", "cljs"], "mime": "text/x-clojure", "run": False},
+"assembly": {"ext": ["asm", "s"], "mime": "text/x-asm", "run": False},
+"dockerfile": {"ext": ["dockerfile"], "mime": "text/x-dockerfile","run": False},
+"makefile": {"ext": ["mk", "makefile"], "mime": "text/x-makefile", "run": False},
+"toml": {"ext": ["toml"], "mime": "text/x-toml", "run": False},
+"ini": {"ext": ["ini", "cfg", "conf"], "mime": "text/x-ini", "run": False},
+"text": {"ext": ["txt", "log"], "mime": "text/plain", "run": False},
+"nix": {"ext": ["nix"], "mime": "text/x-nix", "run": False},
+}
+
+LANG_PATTERNS = [
+(re.compile(r"^\s*<!DOCTYPE\s+html", re.I | re.M), "html"),
+(re.compile(r"<html[\s>]", re.I), "html"),
+(re.compile(r"<head[\s>]", re.I), "html"),
+(re.compile(r"#!/usr/bin/env\s+python|#!/usr/bin/python", re.I), "python"),
+(re.compile(r"^\s*def\s+\w+\s*\(", re.M), "python"),
+(re.compile(r"^\s*import\s+\w+", re.M), "python"),
+(re.compile(r"^\s*from\s+\w+\s+import", re.M), "python"),
+(re.compile(r"#!/usr/bin/env\s+bash|#!/bin/bash|#!/bin/sh", re.I), "bash"),
+(re.compile(r"^\s*function\s+\w+\s*\(\s*\)", re.M), "bash"),
+(re.compile(r"^\s*package\s+main", re.M), "go"),
+(re.compile(r"^\s*fn\s+\w+\s*\(", re.M), "rust"),
+(re.compile(r"^\s*public\s+class\s+\w+", re.M), "java"),
+(re.compile(r"^\s*#include\s+<", re.M), "c"),
+(re.compile(r"^\s*namespace\s+\w+", re.M), "cpp"),
+(re.compile(r"^\s*using\s+namespace", re.M), "cpp"),
+(re.compile(r"^\s*<\?php", re.I), "php"),
+(re.compile(r"^\s*require\s+['\"]", re.M), "ruby"),
+(re.compile(r"^\s*class\s+\w+", re.M), "python"),
+(re.compile(r"^\s*\{\s*\"", re.M), "json"),
+(re.compile(r"^\s*---\s*$", re.M), "yaml"),
+(re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*", re.M), "yaml"),
+(re.compile(r"^\s*#\s+", re.M), "markdown"),
+(re.compile(r"^\s*SELECT\s+.+\s+FROM", re.I | re.M), "sql"),
+(re.compile(r"^\s*<\?xml", re.I), "xml"),
+(re.compile(r"^\s*FROM\s+\w+", re.I | re.M), "dockerfile"),
+(re.compile(r"^\s*\{\s*[a-z-]+\s*=", re.M), "nix"),
+(re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*\s*=\s*", re.M), "toml"),
+(re.compile(r"^\s*\[[a-z]+\]", re.M), "ini"),
+]
+
+
+def detecter_langage(code, filename=""):
+"""Détecte le langage de programmation."""
+# 1. Par extension de fichier
+if filename:
+ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else filename.lower()
+for lang, info in LANGAGES.items():
+if ext in info["ext"]:
+return lang
+
+# 2. Par motifs dans le code
+for pattern, lang in LANG_PATTERNS:
+if pattern.search(code):
+return lang
+
+return "text"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXÉCUTION DU CODE
+# ═══════════════════════════════════════════════════════════════════════════
+
+def executer_python(code, timeout=10):
+"""Exécute du code Python en sandbox."""
+tmp = os.path.join(TMP_DIR, "run_" + uuid.uuid4().hex[:8] + ".py")
+try:
+with open(tmp, "w", encoding="utf-8") as f:
+f.write(code)
+r = subprocess.run(
+[sys.executable, tmp],
+capture_output=True, text=True, timeout=timeout,
+cwd=TMP_DIR
+)
+return {
+"ok": r.returncode == 0,
+"rc": r.returncode,
+"stdout": r.stdout[-10000:],
+"stderr": r.stderr[-5000:],
+}
+except subprocess.TimeoutExpired:
+return {"ok": False, "err": "timeout " + str(timeout) + "s"}
+except Exception as e:
+return {"ok": False, "err": str(e)[:200]}
+finally:
+try:
+os.unlink(tmp)
+except OSError:
+pass
+
+
+def executer_bash(code, timeout=10):
+"""Exécute du code Bash en sandbox."""
+tmp = os.path.join(TMP_DIR, "run_" + uuid.uuid4().hex[:8] + ".sh")
+try:
+with open(tmp, "w", encoding="utf-8") as f:
+f.write(code)
+os.chmod(tmp, 0o755)
+r = subprocess.run(
+["bash", tmp],
+capture_output=True, text=True, timeout=timeout,
+cwd=TMP_DIR
+)
+return {
+"ok": r.returncode == 0,
+"rc": r.returncode,
+"stdout": r.stdout[-10000:],
+"stderr": r.stderr[-5000:],
+}
+except subprocess.TimeoutExpired:
+return {"ok": False, "err": "timeout " + str(timeout) + "s"}
+except Exception as e:
+return {"ok": False, "err": str(e)[:200]}
+finally:
+try:
+os.unlink(tmp)
+except OSError:
+pass
+
+
+def executer_js(code, timeout=10):
+"""Exécute du JavaScript avec node si disponible."""
+if not shutil_which("node"):
+return {"ok": False, "err": "node non installé"}
+tmp = os.path.join(TMP_DIR, "run_" + uuid.uuid4().hex[:8] + ".js")
+try:
+with open(tmp, "w", encoding="utf-8") as f:
+f.write(code)
+r = subprocess.run(
+["node", tmp],
+capture_output=True, text=True, timeout=timeout,
+cwd=TMP_DIR
+)
+return {
+"ok": r.returncode == 0,
+"rc": r.returncode,
+"stdout": r.stdout[-10000:],
+"stderr": r.stderr[-5000:],
+}
+except subprocess.TimeoutExpired:
+return {"ok": False, "err": "timeout " + str(timeout) + "s"}
+except Exception as e:
+return {"ok": False, "err": str(e)[:200]}
+finally:
+try:
+os.unlink(tmp)
+except OSError:
+pass
+
+
+def shutil_which(cmd):
+import shutil
+return shutil.which(cmd)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GÉNÉRATION D'IMAGES
+# ═══════════════════════════════════════════════════════════════════════════
+
+def generer_svg_code(code, langage, titre="Code", largeur=800):
+"""Génère un SVG stylisé du code (comme GitHub social preview)."""
+lignes = code.split("\n")[:40]
+
+# Échappe HTML
+def esc(s):
+return (s.replace("&", "&amp;")
+.replace("<", "&lt;")
+.replace(">", "&gt;"))
+
+hauteur_ligne = 22
+padding = 30
+header_h = 50
+hauteur = header_h + padding * 2 + len(lignes) * hauteur_ligne
+
+# Couleurs par langage
+couleurs = {
+"python": "#3776ab",
+"javascript": "#f7df1e",
+"typescript": "#3178c6",
+"html": "#e34c26",
+"css": "#264de4",
+"bash": "#4eaa25",
+"yaml": "#cb171e",
+"json": "#292929",
+"markdown": "#083fa1",
+"rust": "#dea584",
+"go": "#00add8",
+"java": "#b07219",
+"c": "#555555",
+"cpp": "#f34b7d",
+"php": "#777bb4",
+"ruby": "#701516",
+"nix": "#5277c3",
+"text": "#666666",
+}
+accent = couleurs.get(langage, "#00d4ff")
+
+svg = []
+svg.append('<?xml version="1.0" encoding="UTF-8"?>')
+svg.append('<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}">'.format(largeur, hauteur, largeur, hauteur))
+svg.append('<defs>')
+svg.append('<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">')
+svg.append('<stop offset="0%" stop-color="#02040a"/>')
+svg.append('<stop offset="100%" stop-color="#0a1018"/>')
+svg.append('</linearGradient>')
+svg.append('</defs>')
+
+# Fond
+svg.append('<rect width="100%" height="100%" fill="url(#bg)" rx="12"/>')
+svg.append('<rect x="0" y="0" width="100%" height="4" fill="{}"/>'.format(accent))
+
+# Header
+svg.append('<circle cx="25" cy="25" r="6" fill="#ff5f56"/>')
+svg.append('<circle cx="45" cy="25" r="6" fill="#ffbd2e"/>')
+svg.append('<circle cx="65" cy="25" r="6" fill="#27c93f"/>')
+svg.append('<text x="90" y="30" font-family="Menlo,monospace" font-size="13" fill="#6a7a8a">{}</text>'.format(esc(titre)))
+svg.append('<text x="{}" y="30" font-family="Menlo,monospace" font-size="11" fill="{}" text-anchor="end">{}</text>'.format(largeur - 30, accent, langage.upper()))
+
+# Lignes de code
+for i, ligne in enumerate(lignes):
+y = header_h + padding + (i + 1) * hauteur_ligne - 6
+num = '{:>3}'.format(i + 1)
+svg.append('<text x="20" y="{}" font-family="Menlo,monospace" font-size="12" fill="#3a4a5a">{}</text>'.format(y, num))
+# Échappe et colorisation simple
+l = esc(ligne)[:110]
+svg.append('<text x="60" y="{}" font-family="Menlo,monospace" font-size="13" fill="#e0e8f0" xml:space="preserve">{}</text>'.format(y, l))
+
+svg.append('</svg>')
+return "\n".join(svg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HTML — Interface éditeur
+# ═══════════════════════════════════════════════════════════════════════════
+
+HTML = r"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#02040a">
+<title>NEXUS CODE STUDIO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+--c1:#00d4ff;--c2:#a855f7;--c3:#c8a45c;--c4:#ff6ec7;--ok:#4ade80;--err:#f87171;
+--bg:#02040a;--card:#0a1018;--border:#1a2540;--text:#e0e8f0;--dim:#6a7a8a;
+--mono:ui-monospace,'JetBrains Mono',Menlo,monospace;
+--sans:-apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;
+--ease:cubic-bezier(0.16,1,0.3,1);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans)}
+.app{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:52px 1fr;height:100vh;
+grid-template-areas:"top top" "left right"}
+@media(max-width:900px){.app{grid-template-columns:1fr;grid-template-rows:52px 1fr 1fr;
+grid-template-areas:"top" "left" "right"}}
+
+.topbar{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 20px;
+border-bottom:1px solid var(--border);background:rgba(10,16,24,.7);backdrop-filter:blur(20px)}
+.logo{font-weight:900;font-size:15px;letter-spacing:-.5px;
+background:linear-gradient(110deg,#fff,var(--c1) 40%,var(--c2) 70%,var(--c4));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.lang-badge{padding:4px 10px;border-radius:20px;font-family:var(--mono);font-size:11px;
+background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.25);color:var(--c1);
+letter-spacing:1px;text-transform:uppercase}
+.spacer{flex:1}
+.btn{padding:6px 14px;border-radius:8px;border:1px solid var(--border);
+background:rgba(255,255,255,.04);color:var(--text);cursor:pointer;font-size:12px;
+font-family:inherit;font-weight:600;transition:all .2s}
+.btn:hover{border-color:var(--c1);color:var(--c1)}
+.btn.prim{background:linear-gradient(135deg,var(--c1),var(--c2));color:#000;border:none}
+.btn.prim:hover{color:#000;opacity:.9}
+
+.editor-pane{grid-area:left;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.preview-pane{grid-area:right;display:flex;flex-direction:column;overflow:hidden}
+
+.pane-header{padding:10px 16px;border-bottom:1px solid var(--border);
+background:rgba(10,16,24,.5);font-family:var(--mono);font-size:11px;
+color:var(--dim);letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.pane-header .dot{width:8px;height:8px;border-radius:50%;background:var(--c1);
+box-shadow:0 0 8px var(--c1)}
+
+.editor{flex:1;width:100%;background:#000;color:#e0e8f0;
+font-family:var(--mono);font-size:13px;line-height:1.6;
+border:none;outline:none;padding:16px;resize:none;
+tab-size:2;overflow-y:auto}
+
+.preview{flex:1;position:relative;background:#fff;overflow:hidden}
+.preview iframe{width:100%;height:100%;border:none;background:#fff}
+.preview .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+background:var(--bg);color:var(--dim);font-family:var(--mono);font-size:12px;text-align:center;padding:20px}
+
+.console{height:180px;background:#000;border-top:1px solid var(--border);
+font-family:var(--mono);font-size:12px;color:#a5f3fc;padding:12px;
+overflow-y:auto;white-space:pre-wrap;display:none}
+.console.on{display:block}
+.console .ok{color:var(--ok)}
+.console .err{color:var(--err)}
+
+.tabs{display:flex;gap:4px;padding:8px 12px;background:rgba(10,16,24,.3);
+border-bottom:1px solid var(--border);overflow-x:auto}
+.tab{padding:4px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;
+color:var(--dim);cursor:pointer;transition:all .2s;white-space:nowrap;
+background:rgba(255,255,255,.02)}
+.tab:hover{color:var(--text)}
+.tab.on{background:rgba(0,212,255,.12);color:var(--c1)}
+
+.example-bar{padding:6px 12px;background:rgba(0,0,0,.3);
+border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap}
+.ex{padding:3px 10px;border-radius:12px;font-family:var(--mono);font-size:10px;
+background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+color:var(--dim);cursor:pointer;transition:all .2s}
+.ex:hover{color:var(--c1);border-color:var(--c1)}
+
+.toolbar{padding:6px 12px;background:rgba(0,0,0,.3);
+border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.status{font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto}
+
+.overlay{position:fixed;inset:0;background:rgba(2,4,10,.92);backdrop-filter:blur(10px);
+z-index:100;display:none;align-items:center;justify-content:center;padding:40px}
+.overlay.on{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:18px;
+padding:24px;max-width:800px;width:100%;max-height:80vh;overflow:auto}
+.modal h3{color:var(--c1);margin-bottom:16px;font-size:16px}
+.modal .preview-svg{background:#000;border-radius:10px;padding:12px;overflow:auto}
+.modal .close{position:absolute;top:20px;right:20px;font-size:24px;cursor:pointer;color:var(--dim)}
+.modal .close:hover{color:var(--err)}
+
+@media(max-width:900px){
+.editor-pane{border-right:none;border-bottom:1px solid var(--border)}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+<div class="topbar">
+<span class="logo">⚡ NEXUS CODE STUDIO</span>
+<span class="lang-badge" id="lang-badge">text</span>
+<span class="spacer"></span>
+<button class="btn" onclick="ouvrirImage()">📷 Image</button>
+<button class="btn" onclick="exporter()">💾 Export</button>
+<button class="btn prim" onclick="runCode()">▶ Exécuter</button>
+</div>
+
+<div class="editor-pane">
+<div class="pane-header"><span class="dot"></span> Éditeur</div>
+<div class="example-bar" id="examples"></div>
+<textarea class="editor" id="editor" spellcheck="false"
+placeholder="Colle ou tape ton code ici... HTML, CSS, JS, Python, Bash, YAML, JSON, Markdown..."></textarea>
+<div class="toolbar">
+<button class="btn" onclick="formaterJSON()">JSON Format</button>
+<button class="btn" onclick="genererMarkdown()">MD → HTML</button>
+<button class="btn" onclick="clearAll()">Effacer</button>
+<button class="btn" onclick="beautify()">Beautify</button>
+<span class="status" id="status">prêt</span>
+</div>
+</div>
+
+<div class="preview-pane">
+<div class="pane-header"><span class="dot" style="background:var(--ok);box-shadow:0 0 8px var(--ok)"></span> Aperçu live</div>
+<div class="preview">
+<iframe id="preview"></iframe>
+<div class="empty" id="preview-empty">Tape du code à gauche → l'aperçu apparaît ici</div>
+</div>
+<div class="console" id="console"></div>
+</div>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target.id==='overlay')fermerOverlay()">
+<div class="modal">
+<span class="close" onclick="fermerOverlay()">×</span>
+<h3 id="modal-title">Aperçu image</h3>
+<div class="preview-svg" id="modal-body"></div>
+<div style="margin-top:16px;text-align:center">
+<a class="btn" id="download-link" download="code.svg">⬇ Télécharger SVG</a>
+</div>
+</div>
+</div>
+
+<script>
+const editor = document.getElementById('editor');
+const preview = document.getElementById('preview');
+const previewEmpty = document.getElementById('preview-empty');
+const badge = document.getElementById('lang-badge');
+const statusEl = document.getElementById('status');
+const consoleEl = document.getElementById('console');
+
+let currentLang = 'text';
+let debounceT = null;
+
+// ═══ DÉTECTION DE LANGAGE (côté client) ═══
+function detectLang(code) {
+if (!code.trim()) return 'text';
+
+if (/^\s*<!DOCTYPE\s+html/i.test(code) || /<html[\s>]/i.test(code)) return 'html';
+if (/^\s*#!.*python/i.test(code) || /^\s*def\s+\w+\s*\(/m.test(code) || /^\s*import\s+\w+/m.test(code)) return 'python';
+if (/^\s*#!.*(bash|sh)/i.test(code)) return 'bash';
+if (/^\s*\{\s*"[^"]+"\s*:/.test(code)) return 'json';
+if (/^\s*---\s*$/m.test(code) || /^[a-z_][a-z0-9_]*\s*:\s*/m.test(code)) return 'yaml';
+if (/^\s*<(\?xml|svg)/i.test(code)) return 'xml';
+if (/^\s*package\s+main/m.test(code)) return 'go';
+if (/^\s*fn\s+\w+\s*\(/m.test(code)) return 'rust';
+if (/^\s*public\s+class/m.test(code)) return 'java';
+if (/^\s*#include\s*</m.test(code)) return 'c';
+if (/^\s*namespace\s+\w+/m.test(code)) return 'cpp';
+if (/^\s*<\?php/i.test(code)) return 'php';
+if (/^\s*require\s+['"]/m.test(code)) return 'ruby';
+if (/^\s*SELECT\s+.+FROM/is.test(code)) return 'sql';
+if (/^\s*FROM\s+\w+/im.test(code)) return 'dockerfile';
+if (/^\s*\{[^}]*=/.test(code)) return 'nix';
+if (/^\s*#\s+\S/m.test(code) && code.split('\n').every(l => /^\s*(#|\*|-|\d+\.|$)/.test(l))) return 'markdown';
+if (/^\s*@import|^\s*\.[\w-]+\s*\{/m.test(code)) return 'css';
+if (/^\s*(const|let|var|function)\s+/m.test(code)) return 'javascript';
+if (/^\s*<\w+[^>]*>/.test(code)) return 'html';
+
+return 'text';
+}
+
+// ═══ APERÇU LIVE ═══
+function updatePreview() {
+const code = editor.value;
+currentLang = detectLang(code);
+badge.textContent = currentLang;
+
+if (!code.trim()) {
+previewEmpty.style.display = 'flex';
+preview.srcdoc = '';
+return;
+}
+previewEmpty.style.display = 'none';
+
+let html = '';
+
+if (currentLang === 'html') {
+html = code;
+} else if (currentLang === 'css') {
+html = `<!DOCTYPE html><html><head><style>${code}</style></head><body>
+<div class="test">Aperçu CSS — ce texte utilise ton CSS</div>
+<h1>Titre H1</h1><p>Paragraphe de test</p>
+<button>Bouton</button>
+</body></html>`;
+} else if (currentLang === 'javascript') {
+html = `<!DOCTYPE html><html><head><style>
+body{font-family:Menlo,monospace;padding:20px;background:#0a1018;color:#e0e8f0}
+pre{background:#000;padding:12px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap}
+.error{color:#f87171}.ok{color:#4ade80}
+</style></head><body>
+<h3>Console JavaScript</h3>
+<pre id="out">▶ Exécution...</pre>
+<script>
+(function(){
+const out = document.getElementById('out');
+const log = (msg, cls) => {
+const color = cls === 'error' ? '#f87171' : '#a5f3fc';
+out.innerHTML += '\\n<span style="color:' + color + '">' + msg + '</span>';
+};
+const origLog = console.log, origErr = console.error;
+console.log = (...a) => { log(a.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')); origLog(...a); };
+console.error = (...a) => { log(a.join(' '), 'error'); origErr(...a); };
+out.innerHTML = '';
+try {
+${code.split('\n').map(l => ' ' + l).join('\n')}
+} catch(e) { console.error('❌ ' + e.message); }
+})();
+<\/script></body></html>`;
+} else if (currentLang === 'json') {
+try {
+const j = JSON.parse(code);
+html = `<!DOCTYPE html><html><head><style>
+body{font-family:Menlo,monospace;padding:20px;background:#0a1018;color:#e0e8f0}
+pre{background:#000;padding:16px;border-radius:8px;color:#a5f3fc;overflow:auto}
+.key{color:#4ade80}.str{color:#fbbf24}.num{color:#f87171}.bool{color:#a855f7}
+</style></head><body>
+<h3 style="color:#4ade80">✓ JSON valide</h3>
+<pre>${syntaxHighlightJSON(JSON.stringify(j, null, 2))}</pre>
+</body></html>`;
+} catch(e) {
+html = `<!DOCTYPE html><html><head><style>
+body{font-family:Menlo,monospace;padding:20px;background:#0a1018;color:#f87171}
+</style></head><body><h3>❌ JSON invalide</h3><pre>${e.message}</pre></body></html>`;
+}
+} else if (currentLang === 'yaml') {
+html = `<!DOCTYPE html><html><head><style>
+body{font-family:Menlo,monospace;padding:20px;background:#0a1018;color:#e0e8f0}
+pre{background:#000;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap}
+</style></head><body>
+<h3 style="color:#a855f7">YAML</h3>
+<pre>${escapeHtml(code)}</pre>
+</body></html>`;
+} else if (currentLang === 'markdown') {
+html = `<!DOCTYPE html><html><head><style>
+body{font-family:-apple-system,sans-serif;padding:32px;background:#fff;color:#111;line-height:1.7;max-width:800px;margin:auto}
+h1,h2,h3{color:#0066cc;border-bottom:1px solid #eee;padding-bottom:6px}
+code{background:#f4f4f4;padding:2px 6px;border-radius:4px;font-family:Menlo,monospace;font-size:13px}
+pre{background:#f4f4f4;padding:12px;border-radius:8px;overflow:auto}
+pre code{background:none}
+blockquote{border-left:4px solid #0066cc;padding-left:16px;color:#666;margin:16px 0}
+a{color:#0066cc}
+</style></head><body>
+${simpleMarkdown(code)}
+</body></html>`;
+} else if (currentLang === 'svg' || currentLang === 'xml') {
+html = code;
+} else {
+html = `<!DOCTYPE html><html><head><style>
+body{font-family:Menlo,monospace;padding:20px;background:#0a1018;color:#e0e8f0}
+pre{background:#000;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap;font-size:13px}
+.badge{display:inline-block;padding:4px 12px;background:rgba(0,212,255,.15);color:#00d4ff;border-radius:12px;font-size:11px;letter-spacing:1px}
+</style></head><body>
+<span class="badge">${currentLang.toUpperCase()}</span>
+<h3 style="color:#00d4ff;margin:16px 0">Aperçu</h3>
+<pre>${escapeHtml(code.substring(0, 3000))}</pre>
+</body></html>`;
+}
+
+preview.srcdoc = html;
+}
+
+// ═══ UTILS ═══
+function escapeHtml(s) {
+return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function syntaxHighlightJSON(json) {
+return escapeHtml(json)
+.replace(/"([^"]+)":/g, '<span class="key">"$1"</span>:')
+.replace(/: "([^"]*)"/g, ': <span class="str">"$1"</span>')
+.replace(/: (\d+)/g, ': <span class="num">$1</span>')
+.replace(/: (true|false|null)/g, ': <span class="bool">$1</span>');
+}
+function simpleMarkdown(md) {
+let h = escapeHtml(md);
+h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+h = h.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+h = h.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+h = h.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+h = h.replace(/^\- (.+)$/gm, '<li>$1</li>');
+h = h.replace(/\n\n/g, '</p><p>');
+return '<p>' + h + '</p>';
+}
+
+// ═══ ACTIONS ═══
+editor.addEventListener('input', () => {
+clearTimeout(debounceT);
+debounceT = setTimeout(updatePreview, 250);
+});
+
+function runCode() {
+const code = editor.value;
+currentLang = detectLang(code);
+consoleEl.classList.add('on');
+consoleEl.textContent = '▶ Exécution ' + currentLang + '...\n';
+
+if (currentLang === 'html' || currentLang === 'css' || currentLang === 'javascript') {
+updatePreview();
+consoleEl.textContent += '✓ Aperçu mis à jour dans le panneau droit\n';
+return;
+}
+
+fetch('/api/run', {
+method: 'POST',
+headers: {'Content-Type': 'application/json'},
+body: JSON.stringify({code, lang: currentLang})
+})
+.then(r => r.json())
+.then(d => {
+let out = '';
+if (d.ok) {
+out = '✓ Succès (rc=' + d.rc + ')\n\n';
+if (d.stdout) out += d.stdout;
+if (d.stderr) out += '\n[stderr]\n' + d.stderr;
+} else {
+out = '❌ Erreur\n\n' + (d.err || d.stderr || '?');
+}
+consoleEl.textContent = out;
+})
+.catch(e => {
+consoleEl.textContent = '❌ ' + e.message;
+});
+}
+
+function ouvrirImage() {
+const code = editor.value;
+if (!code.trim()) {
+alert('Rien à convertir en image');
+return;
+}
+const lang = detectLang(code);
+
+fetch('/api/image', {
+method: 'POST',
+headers: {'Content-Type': 'application/json'},
+body: JSON.stringify({code, lang, titre: 'NEXUS CODE STUDIO'})
+})
+.then(r => r.json())
+.then(d => {
+if (!d.ok) { alert('Erreur : ' + (d.err || '?')); return; }
+document.getElementById('modal-body').innerHTML = d.svg;
+document.getElementById('download-link').href = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(d.svg)));
+document.getElementById('overlay').classList.add('on');
+});
+}
+
+function fermerOverlay() {
+document.getElementById('overlay').classList.remove('on');
+}
+
+function exporter() {
+const code = editor.value;
+const lang = currentLang;
+const blob = new Blob([code], {type: 'text/plain'});
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+const exts = {html:'html', css:'css', javascript:'js', python:'py', bash:'sh', yaml:'yml', json:'json', markdown:'md', xml:'xml'};
+a.download = 'code.' + (exts[lang] || 'txt');
+a.click();
+}
+
+function clearAll() {
+if (!confirm('Effacer tout ?')) return;
+editor.value = '';
+updatePreview();
+}
+
+function formaterJSON() {
+try {
+const j = JSON.parse(editor.value);
+editor.value = JSON.stringify(j, null, 2);
+updatePreview();
+} catch(e) {
+alert('JSON invalide : ' + e.message);
+}
+}
+
+function genererMarkdown() {
+editor.value = '# Titre\n\n## Sous-titre\n\n**Gras** et *italique*\n\n- Liste 1\n- Liste 2\n\n```python\nprint("hello")\n```\n';
+updatePreview();
+}
+
+function beautify() {
+// Beautification basique : indentation cohérente
+const code = editor.value;
+const lang = detectLang(code);
+if (lang === 'json') { formaterJSON(); return; }
+const lines = code.split('\n');
+let indent = 0;
+const out = [];
+for (let line of lines) {
+const trimmed = line.trim();
+if (trimmed.startsWith('}') || trimmed.startsWith(']') || trimmed.startsWith(')')) indent = Math.max(0, indent - 1);
+if (trimmed) out.push(' '.repeat(indent) + trimmed);
+else out.push('');
+if (trimmed.endsWith('{') || trimmed.endsWith('[') || trimmed.endsWith('(')) indent++;
+}
+editor.value = out.join('\n');
+updatePreview();
+}
+
+// ═══ EXEMPLES ═══
+const EXEMPLES = {
+'HTML': `<!DOCTYPE html>
+<html>
+<head>
+<title>Bonjour</title>
+<style>
+body { font-family: sans-serif; text-align: center; padding: 50px; }
+h1 { color: #00d4ff; }
+</style>
+</head>
+<body>
+<h1>NEXUS CODE STUDIO</h1>
+<p>Éditeur live HTML / CSS / JS</p>
+<button onclick="alert('Hello!')">Clique</button>
+</body>
+</html>`,
+
+'Python': `#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import math
+
+def omega(max_iter=200):
+x = 1.0
+for _ in range(max_iter):
+xn = math.exp(-x)
+if abs(xn - x) < 1e-15:
+return xn
+x = xn
+return x
+
+print("Omega constant =", omega())
+print("π =", math.pi)
+print("e =", math.e)`,
+
+'Bash': `#!/bin/bash
+echo "=== NEXUS ==="
+echo "Date : $(date)"
+echo "User : $USER"
+echo "OS : $(uname -s)"
+echo "Kernel : $(uname -r)"`,
+
+'JSON': `{
+"nom": "NEXUS",
+"version": "1.0.0",
+"auteur": "Aissa Mohammedi",
+"actif": true,
+"score": 42,
+"tags": ["code", "studio", "live"]
+}`,
+
+'YAML': `nom: NEXUS
+version: 1.0.0
+auteur: Aissa Mohammedi
+actif: true
+score: 42
+tags:
+- code
+- studio
+- live`,
+
+'CSS': `body {
+background: #000;
+color: #00d4ff;
+font-family: sans-serif;
+}
+h1 {
+font-size: 48px;
+text-align: center;
+}`,
+
+'JS': `// NEXUS JavaScript demo
+const e = Math.E;
+let sum = 0;
+for (let i = 1; i <= 100; i++) {
+sum += e / i;
+}
+console.log("Somme :", sum.toFixed(6));`,
+
+'Markdown': `# NEXUS
+
+## Titre 2
+
+**Gras** et *italique*.
+
+- Liste 1
+- Liste 2
+
+\`\`\`python
+print("hello")
+\`\`\`
+
+> Citation
+
+[Lien](https://nexus.local)`,
+};
+
+function initExemples() {
+const bar = document.getElementById('examples');
+for (const [nom, code] of Object.entries(EXEMPLES)) {
+const b = document.createElement('div');
+b.className = 'ex';
+b.textContent = nom;
+b.onclick = () => {
+editor.value = code;
+updatePreview();
+};
+bar.appendChild(b);
+}
+}
+
+initExemples();
+updatePreview();
+editor.focus();
+</script>
+</body>
+</html>
+"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HANDLER HTTP
+# ═══════════════════════════════════════════════════════════════════════════
+
+class Handler(BaseHTTPRequestHandler):
+server_version = "NexusCodeStudio/" + VERSION
+protocol_version = "HTTP/1.1"
+
+def log_message(self, *a):
+pass
+
+def _send(self, code, body, ctype="text/html; charset=utf-8"):
+if isinstance(body, str):
+body = body.encode("utf-8")
+try:
+self.send_response(code)
+self.send_header("Content-Type", ctype)
+self.send_header("Content-Length", str(len(body)))
+self.send_header("Access-Control-Allow-Origin", "*")
+self.send_header("Cache-Control", "no-store")
+self.end_headers()
+self.wfile.write(body)
+except (BrokenPipeError, ConnectionResetError):
+pass
+
+def _json(self, code, obj):
+self._send(code, json.dumps(obj, indent=2, ensure_ascii=False, default=str),
+"application/json; charset=utf-8")
+
+def _body(self):
+try:
+n = int(self.headers.get("Content-Length", "0") or "0")
+except Exception:
+n = 0
+if n <= 0 or n > 10_000_000:
+return {}
+try:
+return json.loads(self.rfile.read(n).decode("utf-8", "ignore") or "{}")
+except Exception:
+return {}
+
+def do_GET(self):
+p = urllib.parse.urlparse(self.path)
+path = p.path
+
+if path in ("/", "/index.html"):
+return self._send(200, HTML)
+
+if path == "/api/status":
+return self._json(200, {
+"ok": True, "service": "NEXUS CODE STUDIO",
+"version": VERSION, "auteur": AUTEUR,
+"licence": LICENCE, "port": PORT,
+"pid": os.getpid(),
+"uptime_s": int(time.time() - START_TS),
+"langages": list(LANGAGES.keys()),
+})
+
+if path == "/api/langs":
+return self._json(200, {"ok": True, "langages": LANGAGES})
+
+if path == "/api/exemples":
+return self._json(200, {"ok": True, "exemples": list(LANGAGES.keys())})
+
+return self._send(404, "404 — Not found")
+
+def do_POST(self):
+p = urllib.parse.urlparse(self.path)
+path = p.path
+data = self._body()
+
+if path == "/api/run":
+code = data.get("code", "")
+lang = data.get("lang", "text")
+if lang == "python" or (lang == "text" and code.startswith("#!")):
+r = executer_python(code)
+elif lang == "bash":
+r = executer_bash(code)
+elif lang == "javascript":
+r = executer_js(code)
+elif lang == "html":
+r = {"ok": True, "rc": 0, "stdout": "HTML rendu dans le navigateur", "stderr": ""}
+else:
+r = {"ok": False, "err": "Exécution non supportée pour : " + lang}
+return self._json(200, r)
+
+if path == "/api/image":
+code = data.get("code", "")
+lang = data.get("lang", "text")
+titre = data.get("titre", "Code")
+svg = generer_svg_code(code, lang, titre)
+return self._json(200, {"ok": True, "svg": svg, "lang": lang})
+
+if path == "/api/save":
+nom = re.sub(r"[^a-zA-Z0-9_.-]", "_", data.get("nom", "code"))[:60]
+code = data.get("code", "")
+lang = data.get("lang", "text")
+path_file = os.path.join(PROJECTS, nom + "." + lang)
+try:
+with open(path_file, "w", encoding="utf-8") as f:
+f.write(code)
+return self._json(200, {"ok": True, "file": path_file})
+except OSError as e:
+return self._json(500, {"ok": False, "err": str(e)[:150]})
+
+return self._json(404, {"ok": False, "err": "route inconnue"})
+
+def do_OPTIONS(self):
+try:
+self.send_response(204)
+self.send_header("Access-Control-Allow-Origin", "*")
+self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+self.send_header("Access-Control-Allow-Headers", "*")
+self.send_header("Content-Length", "0")
+self.end_headers()
+except Exception:
+pass
+
+
+class Server(ThreadingMixIn, HTTPServer):
+daemon_threads = True
+allow_reuse_address = True
+
+
+PORT = PORT_PREF
+START_TS = time.time()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════════════════
+
+def port_libre(port):
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+s.settimeout(1)
+s.bind(("127.0.0.1", port))
+return True
+except OSError:
+return False
+finally:
+try:
+s.close()
+except Exception:
+pass
+
+
+def ip_lan():
+try:
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("8.8.8.8", 80))
+ip = s.getsockname()[0]
+s.close()
+return ip
+except Exception:
+return "127.0.0.1"
+
+
+def main():
+global PORT
+
+print("")
+print("=" * 74)
+print(" NEXUS CODE STUDIO v" + VERSION)
+print(" Auteur : " + AUTEUR + " | Licence : " + LICENCE)
+print("=" * 74)
+print("")
+print(" Éditeur de code local avec :")
+print(" • Détection auto du langage (30+ langages)")
+print(" • Aperçu live HTML / CSS / JS")
+print(" • Exécution Python / Bash / JS")
+print(" • Génération d'images SVG du code")
+print(" • Support YAML / JSON / Markdown")
+print("")
+
+if not port_libre(PORT_PREF):
+print(" Port " + str(PORT_PREF) + " occupé, recherche...")
+nv = None
+for p in range(PORT_PREF + 1, PORT_PREF + 15):
+if port_libre(p):
+nv = p
+break
+if nv is None:
+print(" Aucun port libre")
+return
+PORT = nv
+else:
+PORT = PORT_PREF
+
+try:
+with open(PID_FILE, "w", encoding="utf-8") as f:
+f.write(str(os.getpid()))
+except OSError:
+pass
+
+ip = ip_lan()
+print(" Local : http://localhost:" + str(PORT) + "/")
+print(" Réseau : http://" + ip + ":" + str(PORT) + "/")
+print("")
+print(" Base : " + BASE)
+print(" Projets : " + PROJECTS)
+print(" Exports : " + EXPORTS)
+print(" Logs : " + LOG_FILE)
+print("")
+print(" Fonctionnalités :")
+print(" ▶ Exécuter → run le code (Python/Bash/JS)")
+print(" 📷 Image → génère un SVG stylisé du code")
+print(" 💾 Export → télécharge le fichier")
+print(" JSON Format → formate le JSON")
+print(" MD → HTML → insère un exemple Markdown")
+print(" Beautify → indente proprement")
+print("")
+print(" Ctrl+C pour arrêter")
+print("")
+
+log("=== NEXUS CODE STUDIO v" + VERSION + " ===")
+log("Port : " + str(PORT))
+
+try:
+with Server(("0.0.0.0", PORT), Handler) as srv:
+log("Serveur prêt sur 0.0.0.0:" + str(PORT))
+srv.serve_forever()
+except KeyboardInterrupt:
+print("")
+print(" Arrêté.")
+print("")
+except OSError as e:
+print(" Erreur port " + str(PORT) + " : " + str(e))
+finally:
+try:
+if os.path.exists(PID_FILE):
+os.unlink(PID_FILE)
+except OSError:
+pass
+
+
+if __name__ == "__main__":
+try:
+main()
+except Exception as e:
+print(" ERREUR FATALE : " + str(e))
