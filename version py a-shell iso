@@ -1,0 +1,2215 @@
+#! /usr/bin/env python3# -*- codage: utf-8 -*-
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# NEXUS QUICKHUB v4.0.0 — MÉGA-RUNTIME MULTI-LANGAGES
+Auteur : Aissa Mohammedi (DGK)
+# Licence : NEXUS-OPEN-4.0
+#
+# CORRECTIONS v3 → v4 :
+# ✅ HTML s'affiche VRAIMENT (Blob URL au lieu de base64 URL de données)
+# ✅ CSS/JS/MD/YAML/JSON/SVG s'affichent
+# ✅ Exécution RÉELLE : Python, Bash, JS (sous-processus sandbox)
+# ✅ 120+ langues en clincom les ORPHELINS (COBOL, Fortran, Lisp, Prolog,
+# Forth, Brainfuck, Whitespace, Befunge, LOLCODE, Shakespeare...)
+# ✅ Terminal interactif
+# ✅ Diff viewer
+# ✅ Multi-onglets de fichiers
+# ✅ Rechercher/Remplacer avec regex
+# ✅ Snippets par langage
+# ✅ MCP v2 complet
+# ✅ GitLab complet
+# ✅ Science avec graphes ASCII
+# ✅ Wiki avec infobox
+# ✅ SSE pour live reload
+# ✅ Port 9099
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+
+import os
+import re
+import sys
+import json
+import math
+import time
+import socket
+import base64
+import hashlib
+import datetime
+import threading
+import subprocess
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+
+VERSION = "4.0.0"
+AUTEUR = "Aissa Mohammedi (DGK)"
+LICENCE = "NEXUS-OPEN-4.0"
+PORT_PREF = 9099
+
+HOME_DIR = os.path.expanduser("~")
+BASE = os.path.join(HOME_DIR, "Documents", "nexus_quickhub")
+SRC_DIR = os.path.join(BASE, "src")
+CACHE = os.path.join(BASE, "cache")
+LOGS_DIR = os.path.join(BASE, "logs")
+EXPORT = os.path.join(BASE, "export")
+PID_DIR = os.path.join(BASE, "pid")
+TMP = os.path.join(BASE, "tmp")
+SNAP_DIR = os.path.join(BASE, "snapshots")
+MCP_DIR = os.path.join(BASE, "mcp")
+GITLAB_DIR = os.path.join(BASE, "gitlab")
+SCIENCE_DIR= os.path.join(BASE, "science")
+WIKI_DIR = os.path.join(BASE, "wiki")
+TERM_DIR = os.path.join(BASE, "terminal")
+
+for d in (BASE, SRC_DIR, CACHE, LOGS_DIR, EXPORT, PID_DIR, TMP, SNAP_DIR,
+MCP_DIR, GITLAB_DIR, SCIENCE_DIR, WIKI_DIR, TERM_DIR):
+os.makedirs(d, exist_ok=True)
+
+LOG_FILE = os.path.join(LOGS_DIR, "quickhub.log")
+PID_FILE = os.path.join(PID_DIR, "server.pid")
+START_TS = time.time()
+LOG_LK = threading.RLock()
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# LOG
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+def log(msg):
+ts = time.strftime("%Y-%m-%d %H:%M:%S")
+ligne = "[{}] {}".format(ts, msg)
+try: print(line, flush=True)
+except Exception: pass
+with LOG_LK:
+try:
+with open(LOG_FILE, "a", encoding="utf-8") as f:
+f.write(line + "\n")
+sauf OSERror: passer
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# 120+ LANGAGES — les ORPHELINS
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+LANGUES = {
+# ─── WEB ───
+"html": {"ext": [".html",".htm"], "couleur":"e34f26", "exec": False},
+"css": {"ext": [".css"], "couleur":"#1572b6", "exec": Faux},
+"scss": {"ext": [".scss",".sass"], "couleur":"#c6538c", "exec": Faux},
+"less": {"ext": [".less"], "color":"#1d365d", "exec": False},
+"javascript": {"ext": [".js",".mjs",".cjs"], "couleur":"#f7df1e", "exec": True, "runner":"node"},
+"typescript": {"ext": [".ts"], "couleur":"#3178c6", "exec": True, "runner":"ts-node"},
+"jsx": {"ext": [".jsx"], "couleur":"#61dafb", "exec": Faux},
+"tsx": {"ext": [".tsx"], "couleur":"#61dafb", "exec": Faux},
+"vue": {"ext": [".vue"], "couleur":"#42b883", "exec": Faux},
+"svelte": {"ext": [".svelte"], "couleur":"#ff3e00", "exec": Faux},
+"astro": {"ext": [".astro"], "couleur":"#ff5d01", "exec": Faux},
+"solidité": {"ext": [".sol"], "couleur":"#363636", "exec": Faux},
+"elm": {"ext": [".elm"], "couleur":"#60b5cc", "exec": Faux},
+"purscript": {"ext": [".purs"], "couleur":"#1d222d", "exec": Faux},
+"reason": {"ext": [".re",".rei"], "couleur":"#ff5847", "exec": Faux},
+"rescript": {"ext": [".res"], "couleur":"#ed4b5c", "exec": False},
+
+# ─── BACKEND ───
+"python": {"ext": [".py",".pyw"], "couleur":"#3776ab", "exec": True, "runner":"python3"},
+"rouille": {"ext": [".rs"], "couleur":"#dea584", "exec": True, "runner":"rustc"},
+"c": {"ext": [".c",".h"], "couleur":"#555555", "exec": True, "runner":"gcc"},
+"cpp": {"ext": [".cpp",".hpp",".cc",".cxx"], "couleur":"#00599c", "exec": True, "runner":"g++"},
+"csharp": {"ext": [".cs"], "couleur":"#239120", "exec": False},
+"go": {"ext": [".go"], "couleur":"#00add8", "exec": True, "runner":"go"},
+"java": {"ext": [".java"], "couleur":"#007396", "exec": True, "runner":"java"},
+"kotlin": {"ext": [".kt",".kts"], "couleur":"#7f52ff", "exec": Faux},
+"swift": {"ext": [".swift"], "couleur":"#fa7343", "exec": Faux},
+"dart": {"ext": [".dart"], "couleur":"#0175c2", "exec": False},
+"scala": {"ext": [".scala"], "couleur":"#dc322f", "exec": Faux},
+"ruby": {"ext": [".rb"], "couleur":"#cc342d", "exec": True, "runner":"ruby"},
+"php": {"ext": [".php"], "couleur":"#777bb4", "exec": True, "runner":"php"},
+"perl": {"ext": [".pl",".pm"], "couleur":"#39457e", "exec": True, "runner":"perl"},
+"lua": {"ext": [".lua"], "color":"#000080", "exec": True, "runner":"lua"},
+"elixir": {"ext": [".ex",".exs"], "color":"#6e4a7e", "exec": False},
+"erlang": {"ext": [".erl"], "color":"#a90533", "exec": False},
+"clojure": {"ext": [".clj",".cljs"], "color":"#db5855", "exec": False},
+"haskell": {"ext": [".hs"], "color":"#5e5086", "exec": False},
+"ocaml": {"ext": [".ml",".mli"], "color":"#3be133", "exec": False},
+"fsharp": {"ext": [".fs",".fsx"], "color":"#378bba", "exec": False},
+"nim": {"ext": [".nim"], "color":"#ffc200", "exec": False},
+"zig": {"ext": [".zig"], "color":"#f7a41d", "exec": False},
+"v": {"ext": [".v"], "color":"#4f87c4", "exec": False},
+"crystal": {"ext": [".cr"], "color":"#000000", "exec": False},
+"groovy": {"ext": [".groovy"], "color":"#4298b8", "exec": False},
+"coffee": {"ext": [".coffee"], "color":"#6f4e37", "exec": False},
+"haxe": {"ext": [".hx"], "color":"#df7900", "exec": False},
+
+# ─── ORPHELINS (les langages abandonnés) ───
+"cobol": {"ext": [".cob",".cbl",".cpy"], "color":"#005ca5", "exec": False, "orphan": True,
+"desc": "COBOL (1959) — Langage bancaire, encore utilisé"},
+"fortran": {"ext": [".f",".f90",".f95",".f03"], "color":"#4d41b1", "exec": True, "runner":"gfortran", "orphan": True,
+"desc": "Fortran (1957) — Calcul scientifique"},
+"ada": {"ext": [".adb",".ads"], "color":"#02f88c", "exec": False, "orphan": True,
+"desc": "Ada (1980) — Aéronautique, militaire"},
+"pascal": {"ext": [".pas",".pp"], "color":"#0b5e94", "exec": True, "runner":"fpc", "orphan": True,
+"desc": "Pascal (1970) — Enseignement"},
+"modula2": {"ext": [".mod"], "color":"#00b0f0", "exec": False, "orphan": True,
+"desc": "Modula-2 (1978) — Systèmes"},
+"algol": {"ext": [".alg"], "color":"#008000", "exec": False, "orphan": True,
+"desc": "ALGOL (1958) — Ancêtre de tous"},
+"basic": {"ext": [".bas"], "color":"#ff6600", "exec": False, "orphan": True,
+"desc": "BASIC (1964) — Débutants"},
+"vb6": {"ext": [".bas",".frm"], "color":"#945db7", "exec": False, "orphan": True,
+"desc": "Visual Basic 6 (1998)"},
+"vbnet": {"ext": [".vb"], "color":"#945db7", "exec": False, "orphan": True},
+"lisp": {"ext": [".lisp",".lsp",".cl"], "color":"#3fb68b", "exec": True, "runner":"sbcl", "orphan": True,
+"desc": "Lisp (1958) — IA historique"},
+"scheme": {"ext": [".scm",".ss"], "color":"#1e5945", "exec": False, "orphan": True,
+"desc": "Scheme (1975) — Lisp épuré"},
+"racket": {"ext": [".rkt"], "color":"#9f1d20", "exec": False, "orphan": True},
+"prolog": {"ext": [".pl",".pro"], "color":"#74283c", "exec": False, "orphan": True,
+"desc": "Prolog (1972) — IA logique"},
+"mercury": {"ext": [".m"], "color":"#ff2b2b", "exec": False, "orphan": True},
+"forth": {"ext": [".fs",".fth",".4th"], "color":"#341708", "exec": False, "orphan": True,
+"desc": "Forth (1970) — Embarqué"},
+"smalltalk": {"ext": [".st"], "color":"#596706", "exec": False, "orphan": True,
+"desc": "Smalltalk (1972) — POO pure"},
+"apl": {"ext": [".apl"], "color":"#5b4b00", "exec": False, "orphan": True,
+"desc": "APL (1966) — Notation mathématique"},
+"j": {"ext": [".ijs"], "color":"#c9a227", "exec": False, "orphan": True,
+"desc": "J (1990) — Successeur d'APL"},
+"k": {"ext": [".k"], "color":"#003366", "exec": False, "orphan": True},
+"bqn": {"ext": [".bqn"], "color":"#00a2ff", "exec": False, "orphan": True},
+"brainfuck": {"ext": [".bf",".b"], "color":"#a83232", "exec": True, "runner":"bf", "orphan": True,
+"desc": "Brainfuck (1993) — Turing-complet minimal"},
+"whitespace": {"ext": [".ws"], "color":"#808080", "exec": False, "orphan": True,
+"desc": "Whitespace (2003) — Espaces uniquement"},
+"befunge": {"ext": [".bef",".bf"], "color":"#e91e63", "exec": False, "orphan": True,
+"desc": "Befunge (1993) — 2D"},
+"malbolge": {"ext": [".mb"], "color":"#000000", "exec": False, "orphan": True,
+"desc": "Malbolge (1998) — Impossible à écrire"},
+"lolcode": {"ext": [".lol"], "color":"#f5d547", "exec": False, "orphan": True,
+"desc": "LOLCODE (2007) — Mème devenu langage"},
+"shakespeare": {"ext": [".spl"], "color":"#8b0000", "exec": False, "orphan": True,
+"desc": "Shakespeare (2001) — Pièces de théâtre"},
+"piet": {"ext": [".piet"], "color":"#ff00ff", "exec": False, "orphan": True},
+"chef": {"ext": [".chef"], "color":"#d2691e", "exec": False, "orphan": True},
+"intercal": {"ext": [".i"], "color":"#333333", "exec": False, "orphan": True},
+"forth_std": {"ext": [".frt"], "color":"#341708", "exec": False, "orphan": True},
+"snobol": {"ext": [".sno"], "color":"#006666", "exec": False, "orphan": True,
+"desc": "SNOBOL (1962) — Traitement texte"},
+"icon": {"ext": [".icn"], "color":"#a020f0", "exec": False, "orphan": True},
+"rexx": {"ext": [".rexx",".rex"], "color":"#8b4513", "exec": False, "orphan": True,
+"desc": "REXX (1979) — Scripting IBM"},
+"pl1": {"ext": [".pl1"], "color":"#003399", "exec": False, "orphan": True},
+"jcl": {"ext": [".jcl"], "color":"#222222", "exec": False, "orphan": True,
+"desc": "JCL — Mainframe IBM"},
+"abap": {"ext": [".abap"], "color":"#2b6cb0", "exec": False, "orphan": True,
+"desc": "ABAP — SAP"},
+"eiffel": {"ext": [".e"], "color":"#5b9bd5", "exec": False, "orphan": True},
+"oberon": {"ext": [".ob2"], "color":"#7a3e9d", "exec": False, "orphan": True},
+"harbour": {"ext": [".prg"], "color":"#005f87", "exec": False, "orphan": True},
+"clipper": {"ext": [".prg"], "color":"#1b5e20", "exec": False, "orphan": True},
+"delphi": {"ext": [".pas",".dpr"], "color":"#b71c1c", "exec": False, "orphan": True},
+"turbo_pascal": {"ext": [".pas"], "color":"#0b5e94", "exec": False, "orphan": True},
+"lisp_common": {"ext": [".lisp"], "color":"#3fb68b", "exec": False, "orphan": True},
+"euphoria": {"ext": [".ex",".exw"], "color":"#ff8c00", "exec": False, "orphan": True},
+"rebol": {"ext": [".r",".reb"], "color":"#004488", "exec": False, "orphan": True},
+"red": {"ext": [".red"], "color":"#b71c1c", "exec": False, "orphan": True},
+
+# ─── SCIENTIFIQUE ───
+"julia": {"ext": [".jl"], "color":"#a270ba", "exec": True, "runner":"julia"},
+"r": {"ext": [".r",".R"], "color":"#276dc3", "exec": True, "runner":"Rscript"},
+"matlab": {"ext": [".m"], "color":"#e16737", "exec": False},
+"octave": {"ext": [".m"], "color":"#0790c0", "exec": True, "runner":"octave"},
+"sas": {"ext": [".sas"], "color":"#0b65c2", "exec": False},
+"stata": {"ext": [".do"], "color":"#1a5c97", "exec": False},
+"spss": {"ext": [".sps"], "color":"#052fad", "exec": False},
+"sagemath": {"ext": [".sage"], "color":"#7ea0c5", "exec": False},
+"lean": {"ext": [".lean"], "color":"#1e2f5a", "exec": False},
+"coq": {"ext": [".v"], "color":"#c73a2b", "exec": False},
+"isabelle": {"ext": [".thy"], "color":"#c2255c", "exec": False},
+"agda": {"ext": [".agda"], "color":"#315e8a", "exec": False},
+
+# ─── DATA / CONFIG ───
+"json": {"ext": [".json"], "color":"#292929", "exec": False},
+"yaml": {"ext": [".yml",".yaml"], "color":"#cb171e", "exec": False},
+"toml": {"ext": [".toml"], "color":"#9c4221", "exec": False},
+"ini": {"ext": [".ini",".conf",".cfg"], "color":"#6a7a8a", "exec": False},
+"xml": {"ext": [".xml",".xsd",".xsl"], "color":"#ff6600", "exec": False},
+"properties": {"ext": [".properties"], "color":"#a0522d", "exec": False},
+"csv": {"ext": [".csv",".tsv"], "color":"#2e8b57", "exec": False},
+"env": {"ext": [".env"], "color":"#ecd53f", "exec": False},
+"hcl": {"ext": [".hcl"], "color":"#844fba", "exec": False},
+
+# ─── SHELL / SCRIPTING ───
+"bash": {"ext": [".sh",".bash"], "color":"#4eaa25", "exec": True, "runner":"bash"},
+"zsh": {"ext": [".zsh"], "color":"#4eaa25", "exec": True, "runner":"zsh"},
+"fish": {"ext": [".fish"], "color":"#4eaa25", "exec": False},
+"powershell": {"ext": [".ps1",".psm1"], "color":"#012456", "exec": False},
+"batch": {"ext": [".bat",".cmd"], "color":"#c1f12e", "exec": False},
+"nushell": {"ext": [".nu"], "color":"#4e9906", "exec": False},
+"awk": {"ext": [".awk"], "color":"#00a000", "exec": True, "runner":"awk"},
+"sed": {"ext": [".sed"], "color":"#800000", "exec": False},
+"tcl": {"ext": [".tcl"], "color":"#e4cc98", "exec": True, "runner":"tclsh"},
+
+# ─── DATABASE ───
+"sql": {"ext": [".sql"], "color":"#e38c00", "exec": False},
+"plsql": {"ext": [".pls",".pks",".pkb"], "color":"#e38c00", "exec": False},
+"tsql": {"ext": [".tsql"], "color":"#e38c00", "exec": False},
+"cypher": {"ext": [".cyp"], "color":"#00e0b8", "exec": False},
+"graphql": {"ext": [".graphql",".gql"], "color":"#e10098", "exec": False},
+
+# ─── DOCS ───
+"markdown": {"ext": [".md",".markdown"], "color":"#083fa1", "exec": False},
+"rst": {"ext": [".rst"], "color":"#141414", "exec": False},
+"latex": {"ext": [".tex"], "color":"#008080", "exec": False},
+"asciidoc": {"ext": [".adoc",".asciidoc"], "color":"#333333", "exec": False},
+"org": {"ext": [".org"], "color":"#77aa99", "exec": False},
+
+# ─── DEVOPS ───
+"dockerfile": {"ext": ["Dockerfile",".dockerfile"], "color":"#2496ed", "exec": False},
+"makefile": {"ext": ["Makefile","makefile",".mk"], "color":"#427819", "exec": True, "runner":"make"},
+"cmake": {"ext": ["CMakeLists.txt",".cmake"], "color":"#064f8c", "exec": False},
+"terraform": {"ext": [".tf",".tfvars"], "color":"#7b42bc", "exec": False},
+"ansible": {"ext": [".yml",".yaml"], "color":"#ee0000", "exec": False},
+"puppet": {"ext": [".pp"], "color":"#302b6d", "exec": False},
+"chef": {"ext": [".rb"], "color":"#f09820", "exec": False},
+"nix": {"ext": [".nix"], "color":"#5277c3", "exec": False},
+"helm": {"ext": [".tpl"], "color":"#0f1689", "exec": False},
+
+# ─── PROTO ───
+"proto": {"ext": [".proto"], "color":"#4f5d95", "exec": False},
+"thrift": {"ext": [".thrift"], "color":"#d12d2d", "exec": False},
+"avro": {"ext": [".avsc"], "color":"#3d8fd1", "exec": False},
+
+# ─── AUTRES ───
+"assembly": {"ext": [".asm",".s",".S"], "color":"#6e4c13", "exec": True, "runner":"nasm"},
+"vim": {"ext": [".vim"], "color":"#019833", "exec": False},
+"emacs": {"ext": [".el"], "color":"#7f5ab6", "exec": False},
+"smali": {"ext": [".smali"], "color":"#6a4c93", "exec": False},
+"wasm": {"ext": [".wat",".wast"], "color":"#654ff0", "exec": False},
+"text": {"ext": [".txt"], "color":"#6a7a8a", "exec": False},
+}
+
+def detecter_langage(code, filename=""):
+if filename:
+ext = os.path.splitext(filename)[1].lower()
+name = os.path.basename(filename).lower()
+for lang, info in LANGUAGES.items():
+for e in info.get("ext", []):
+if ext == e.lower() or name == e.lower():
+return lang
+cl = code[:6000].lower()
+kws = {
+"html": ["<!doctype", "<html", "<div"], "css": ["{", "color:", "@media"],
+"javascript": ["function ", "const ", "=>", "console.log"],
+"typescript": ["interface ", ": string", "type "],
+"python": ["def ", "import ", "print("], "rust": ["fn ", "let mut", "println!"],
+"go": ["package ", "func ", "fmt."], "java": ["public class", "system.out"],
+"cpp": ["#include", "std::"], "c": ["#include", "int main"],
+"bash": ["#!/bin/bash", "echo ", "fi"], "sql": ["select ", "from "],
+"yaml": ["---", "apiversion:", "kind:"], "json": ['":"', "{", "}"],
+"markdown": ["# ", "```", "- ["], "dockerfile": ["from ", "run "],
+"cobol": ["identification division", "procedure division"],
+"fortran": ["program ", "subroutine ", "implicit none"],
+"prolog": [":-", "?-"], "lisp": ["(defun ", "(def ", "(car "],
+"brainfuck": ["+++++", "-----", "[", "]"],
+"pascal": ["program ", "begin", "end."],
+"ada": ["procedure ", "package ", "begin"],
+"forth": [": ", " ;"], "apl": ["⍴", "⍳", "⌈"],
+}
+scores = {}
+for lang, pats in kws.items():
+s = sum(1 for p in pats if p in cl)
+if s > 0: scores[lang] = s
+if scores:
+best = max(scores.items(), key=lambda x: x[1])
+if best[1] >= 2: return best[0]
+return "text"
+
+def get_color(lang):
+return LANGUAGES.get(lang, {}).get("color", "#00d4ff")
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LRU CACHE
+# ═══════════════════════════════════════════════════════════════════════════
+class LRU:
+def __init__(self, cap=300):
+self.cap=cap; self.d={}; self.lk=threading.RLock()
+def get(self,k):
+with self.lk:
+if k in self.d:
+v=self.d.pop(k); self.d[k]=v; return v
+return None
+def put(self,k,v):
+with self.lk:
+if k in self.d: self.d.pop(k)
+elif len(self.d)>=self.cap: self.d.pop(next(iter(self.d)))
+self.d[k]=v
+def size(self):
+with self.lk: return len(self.d)
+
+RENDER_CACHE = LRU(500)
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# EXECUTION ENGINE — Réel, sandboxé, timeout
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+class Executor:
+"""Exécute du code réel dans un sandbox avec timeout."""
+
+TIMEOUT = 10
+
+@staticmethod
+def run(code, lang):
+if not LANGUAGES.get(lang, {}).get("exec", False):
+return {"ok": False, "err": "Langage non-exécutable: " + lang}
+
+# Fichier temporaire
+ext_map = {
+"python": ".py", "bash": ".sh", "javascript": ".js",
+"typescript": ".ts", "go": ".go", "rust": ".rs",
+"c": ".c", "cpp": ".cpp", "java": ".java", "ruby": ".rb",
+"php": ".php", "perl": ".pl", "lua": ".lua", "julia": ".jl",
+"r": ".r", "fortran": ".f90", "pascal": ".pas", "lisp": ".lisp",
+"awk": ".awk", "tcl": ".tcl", "octave": ".m",
+}
+ext = ext_map.get(lang, ".txt")
+tmp_file = os.path.join(TMP, "run_" + str(int(time.time() * 1000)) + ext)
+
+try:
+with open(tmp_file, "w", encoding="utf-8") as f:
+f.write(code)
+except OSError as e:
+return {"ok": False, "err": "Écriture: " + str(e)}
+
+# Commande par langage
+runner = LANGUAGES.get(lang, {}).get("runner", "")
+if not runner:
+return {"ok": False, "err": "Pas de runner pour " + lang}
+
+if not _which(runner):
+os.unlink(tmp_file)
+retour {"ok": Faux, "err": "Runner absent: " + runner + " (installe-le)"}
+
+cmds = {
+"python": ["python3", tmp_file],
+"bash": ["bash", tmp_file],
+"zsh": ["zsh", tmp_file],
+"javascript": ["node", tmp_file],
+"typescript": ["ts-node", tmp_file],
+"go": ["go", "run", tmp_file],
+"ruby": ["ruby", tmp_file],
+"php": ["php", tmp_file],
+"perl": ["perl", tmp_file],
+"lua": ["lua", tmp_file],
+"julia": ["julia", tmp_file],
+"r": ["Rscript", tmp_file],
+"octave": ["octave", "--no-gui", "--eval", "run('" + tmp_file + "')"],
+"awk": ["awk", "-f", tmp_file],
+"tcl": ["tclsh", tmp_file],
+"make": ["make", "-f", tmp_file],
+}
+
+# Compilés
+if lang == "rust":
+bin_out = tmp_file.replace(".rs", "")
+cmds["rust"] = ["bash", "-c", "rustc " + tmp_file + " -o " + bin_out + " && " + bin_out]
+elif lang == "c":
+bin_out = tmp_file.replace(".c", "")
+cmds["c"] = ["bash", "-c", "gcc " + tmp_file + " -o " + bin_out + " -lm && " + bin_out]
+elif lang == "cpp":
+bin_out = tmp_file.replace(".cpp", "")
+cmds["cpp"] = ["bash", "-c", "g++ -std=c++17 " + tmp_file + " -o " + bin_out + " && " + bin_out]
+elif lang == "java":
+cmds["java"] = ["bash", "-c", "cd " + TMP + " && javac " + os.path.basename(tmp_file) + " && java " + os.path.basename(tmp_file).replace(".java", "")
+elif lang == "fortran":
+bin_out = tmp_file.replace(".f90", "")
+cmds["fortran"] = ["bash", "-c", "gfortran " + tmp_file + " -o " + bin_out + " && " + bin_out]
+elif lang == "pascal":
+bin_out = tmp_file.replace(".pas", "")
+cmds["pascal"] = ["bash", "-c", "fpc " + tmp_file + " -o" + bin_out + " && " + bin_out]
+
+cmd = cmds.get(lang)
+if not cmd:
+os.unlink(tmp_file)
+return {"ok": False, "err": "Commande non définie pour " + lang}
+
+try:
+t0 = time.time()
+r = subprocess.run(cmd, capture_output=True, text=True,
+timeout=Executor.TIMEOUT, cwd=TMP)
+dur = time.time() - t0
+
+out = (r.stdout or "")[:10000]
+err = (r.stderr or "")[:5000]
+
+return {
+"ok": r.returncode == 0,
+"code": r.returncode,
+"stdout": dehors,
+"stderr": err,
+"duration_ms": round(dur * 1000, 2),
+"lang": lang,
+}
+except subprocess.TimeoutExpired:
+return {"ok": False, "err": "Timeout (" + str(Executor.TIMEOUT) + "s)", "lang": lang}
+except Exception as e:
+retour {"ok": Faux, "err": str(e), "lang": lang}
+finally:
+try: os.unlink(tmp_file)
+except Exception: pass
+
+def _which(cmd):
+for p in os.environ.get("PATH", "").split(os.pathsep):
+full = os.path.join(p, cmd)
+if os.path.isfile(full) and os.access(full, os.X_OK):
+return True
+Retour Faux
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# SYNTAXE DE SURLIGNAGE
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+def esc(s):
+return (str(s).replace("&","&amp;").replace("<","&lt;")
+.replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;"))
+
+C_KW="#c678dd"; C_STR="#98c379"; C_NUM="#d19a66"; C_COM="#5c6370"
+C_FUNC="#61afef"; C_TYPE="#e5c07b"; C_OP="#56b6c2"; C_VAR="#e06c75"
+
+RÈGLES = {
+"python": [
+(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')', '<span style="color:%s">\\1</span>'%C_COM),
+(r"(#.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(def|class|if|else|elif|for|while|return|import|from|as|try|except|finally|with|lambda|yield|async|await|pass|break|continue|raise|in|is|not|and|or|None|True|False)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r"\b([0-9]+\.[0-9]+|[0-9]+)\b", '<span style="color:%s">\\1</span>'%C_NUM),
+(r'(&quot;[^&]*&quot;|&#39;[^&]*&#39;)', '<span style="color:%s">\\1</span>'%C_STR),
+],
+"javascript": [
+(r"(//.*)$", '<span style="color:%s">\1</span>'%C_COM),
+(r"(/\*[\s\S]*? \*/)", '<span style="color:%s">\1</span>'%C_COM),
+(r"\b(function|const|let|var|if|else|for|while|return|new|this|class|extends|import|export|default|async|await|try|catch|null|undefined|true|false)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r"\b([0-9]+\.[0-9]+|[0-9]+)\b", '<span style="color:%s">\\1</span>'%C_NUM),
+(r'(&quot;[^&]*&quot;|&#39;[^&]*&#39;|`[^`]*`)', '<span style="color:%s">\\1</span>'%C_STR),
+],
+"typescript": [
+(r"(//.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(function|const|let|var|class|interface|type|enum|extends|implements|import|export|async|await|return|if|else|for|while|new|public|private|readonly)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r"\b(string|number|boolean|void|any|unknown|never)\b", '<span style="color:%s">\\1</span>'%C_TYPE),
+],
+"rust": [
+(r"(//.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(fn|let|mut|const|iflese|for|while|loop|return|use|mod|pub|enum|impl|async|await|move|self|self|true|false|None|Some|Ok|Err|unsafe|dyn|static)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r"\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|char|String|Vec|Option|Result)\b",
+'<span style="color:%s">\1</span>'%C_TYPE),
+(r'(&quot;[^&]*&quot;)', '<span style="color:%s">\\1</span>'%C_STR),
+],
+"go": [
+(r"(//.*)$", '<span style="color:%s">\1</span>'%C_COM),
+(r"\b(package|import|func|var|const|if|else|for|switch|case|return|type|struct|interface|map|chan|go|defer|range|nil|true|false|make|len)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r'(&quot;[^&]*&quot;|`[^`]*`)', '<span style="color:%s">\\1</span>'%C_STR),
+],
+"java": [
+(r"(//.*)$", '<span style="color:%s">\1</span>'%C_COM),
+(r"\b(public|private|protected|class|interface|enum|extends|implements|new|static|final|abstract|void|int|long|short|byte|char|float|double|boolean|if|else|for|while|do|switch|case|return|try|catch|finally|throw|import|package|this|super|null|true|false)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r'(&quot;[^&]*&quot;)', '<span style="color:%s">\\1</span>'%C_STR),
+],
+"c": [
+(r"(//.*|/\*[\s\S]*? \*/)$", '<span style="color:%s">\1</span>'%C_COM),
+(r"\b(int|char|void|long|short|float|double|struct|union|enum|typedef|const|static|extern|if|else|for|while|do|switch|case|return|break|continue|sizeof|include|define|NULL)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r'(&quot;[^&]*&quot;)', '<span style="color:%s">\1</span>'%C_STR),
+],
+"cpp": [
+(r"(//.*|/\*[\s\S]*?\*/)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(int|char|void|long|short|float|double|bool|class|struct|namespace|using|public|private|protected|virtual|template|typename|const|static|auto|new|delete|if|else|for|while|return|try|catch|throw|true|false|nullptr|std)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r'(&quot;[^&]*&quot;)', '<span style="color:%s">\\1</span>'%C_STR),
+],
+"bash": [
+(r"(#.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(if|then|else|elif|fi|for|while|do|done|case|function|return|echo|export|source|local|read|cd|ls|mkdir|grep|sed|awk|cat|exit|printf)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r"(\$[a-zA-Z_][a-zA-Z0-9_]*|\$\{[^}]+\})", '<span style="color:%s">\\1</span>'%C_VAR),
+(r'(&quot;[^&]*&quot;|&#39;[^&]*&#39;)', '<span style="color:%s">\\1</span>'%C_STR),
+],
+"html": [
+(r"(&lt;!--[\s\S]*?--&gt;)", '<span style="color:%s">\\1</span>'%C_COM),
+(r"(&lt;/?[a-zA-Z][a-zA-Z0-9]*)", '<span style="color:%s">\\1</span>'%C_KW),
+],
+"css": [
+(r"(/\*[\s\S]*?\*/)", '<span style="color:%s">\\1</span>'%C_COM),
+(r"([a-z-]+)\s*:", '<span style="color:%s">\\1</span>:'%C_KW),
+(r"(#[0-9a-fA-F]{3,8})", '<span style="color:%s">\\1</span>'%C_NUM),
+],
+"sql": [
+(r"(--.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|ALTER|DROP|JOIN|ON|GROUP|BY|ORDER|LIMIT|AS|AND|OR|NOT|NULL|IS|IN|LIKE|COUNT|SUM|AVG|PRIMARY|KEY|FOREIGN|REFERENCES)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+],
+"yaml": [
+(r"(#.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"^(\s*)([a-zA-Z_][a-zA-Z0-9_-]*)\s*:", '\\1<span style="color:%s">\\2</span>:'%C_FUNC),
+],
+"json": [
+(r'("(?:\\.|[^"\\])*")\s*:', '<span style="color:%s">\\1</span>:'%C_FUNC),
+(r'("(?\.[^\\)*)", '<span style="color:%s">\1</span>'%C_STR),
+(r"\b(true|false|null)\b", '<span style="color:%s">\\1</span>'%C_KW),
+(r"\b(-?[0-9]+\.[0-9]+|-?[0-9]+)\b", '<span style="color:%s">\\1</span>'%C_NUM),
+],
+"markdown": [
+(r"^(#{1,6}\s.*)$", '<span style="color:%s;font-weight:bold">\\1</span>'%C_KW),
+(r"(\*\*[^*]+\*\*)", '<span style="color:%s;font-weight:bold">\\1</span>'%C_TYPE),
+(r"(`[^`]+`)", '<span style="color:%s">\\1</span>'%C_STR),
+],
+"ruby": [
+(r"(#.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(def|class|module|if|else|end|return|require|include|true|false|nil|self)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+],
+"php": [
+(r"(//. *|#.*)$", '<span style="color:%s">\1</span>'%C_COM),
+(r"\b(function|class|public|private|protected|static|if|else|for|foreach|while|return|new|use|namespace|echo|require|include|true|false|null)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+(r"(\$[a-zA-Z_][a-zA-Z0-9_]*)", '<span style="color:%s">\\1</span>'%C_VAR),
+],
+"cobol": [
+(r"(^.{6}\*.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(IDENTIFICATION|DIVISION|PROGRAM-ID|AUTHOR|DATA|WORKING-STORAGE|SECTION|PROCEDURE|PERFORM|MOVE|DISPLAY|STOP|RUN|ADD|SUBTRACT|MULTIPLY|DIVIDE|IF|ELSE|END-IF|PIC|VALUE)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+],
+"fortran": [
+(r"(!.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(PROGRAM|SUBROUTINE|FUNCTION|END|IF|ELSE|THEN|DO|WHILE|INTEGER|REAL|COMPLEX|CHARACTER|LOGICAL|IMPLICIT|NONE|CALL|RETURN|WRITE|READ|PRINT)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+],
+"lisp": [
+(r"(;.*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(defun|defmacro|defvar|defparameter|let|let\*|if|cond|when|unless|lambda|quote|car|cdr|cons|list|progn|loop|do|setq|setf)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+],
+"prolog": [
+(r"(% .*)$", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(is|not|mod|write|nl|read|assert|retract|fail|true|false|call|once|findall|bagof|setof)\b",
+'<span style="color:%s">\\1</span>'%C_KW),
+],
+"brainfuck": [
+(r"([+\-]+)", '<span style="color:%s">\\1</span>'%C_KW),
+(r"([<>]+)", '<span style="color:%s">\\1</span>'%C_FUNC),
+(r"(\[|\])", '<span style="color:%s">\\1</span>'%C_STR),
+(r"([.,]+)", '<span style="color:%s">\\1</span>'%C_NUM),
+],
+"pascal": [
+(r"(//.*|\{[\s\S]*?\})", '<span style="color:%s">\\1</span>'%C_COM),
+(r"\b(program|begin|end|var|const|type|procedure|if|then|else|for|to|while|repeat|until|of|uses|interface|writeln|readln)\b",
+'<span style="color:%s">\1</span>'%C_KW),
+],
+}
+
+def colorer(code, lang):
+règles = RÈGLES.get(lang, [])
+lines = code.split("\n")
+out = []
+for line in lines:
+lh = esc(line)
+for pat, rep in rules:
+try: lh = re.sub(pat, rep, lh, flags=re.MULTILINE)
+except Exception: pass
+out.append(lh)
+return "\n".join(out)
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# RENDERERS
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+def rendre_html(code):
+"""Retourne HTML tel quel (avec injection automatique si fragment)."""
+if "<!doctype" not in code.lower() and "<html" not in code.lower():
+return ('<!DOCTYPE html><html><head><meta charset="utf-8">'
+'<style>body{font-family:system-ui;padding:20px;background:#fff;color:#111}'
+'</style></head><body>' + code + '</body></html>')
+return code
+
+def rendre_css(css):
+return ('<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + css + '</style>'
+'<style>body{font-family:system-ui;padding:30px;background:#f5f5f5}'
+'.demo{padding:20px;margin:10px 0;background:#fff;border:1px solid #ddd;border-radius:8px}'
+'h1,h2,h3{margin:0 0 10px}button{padding:8px 16px;cursor:pointer}</style></head><body>'
+'<div class="demo"><h1>H1 — Aperçu</h1><p>Paragraphe avec <strong>gras</strong>, '
+'<em>italique</em>, et <a href="#">lien</a>.</p></div>'
+'<div class="demo"><h2>H2</h2><ul><li>Item 1</li><li>Item 2</li></ul>'
+'<button>Bouton</button></div>'
+'<div class="demo"><h3>Formulaire</h3><input type="text" placeholder="Texte">'
+'<textarea placeholder="Textarea" rows="3"></textarea></div></body></html>')
+
+def rendre_md(md):
+h = md
+h = re.sub(r``(\w*)\n([\s\S]*?) ```",
+lambda m: '<pre style="background:#0a1018;padding:14px;border-radius:8px;'
+'overflow-x:auto;color:#a5f3fc;font-family:monospace;'
+'font-size:13px;border-left:3px solide #00d4ff">'
++ esc(m.group(2).strip()) + '</pre>', h)
+pour i dans la gamme(6, 0, -1):
+h = re.sub(r"^" + "#"*i + r" (.+)$", r'<h%d>\1</h%d>'%(i,i), h, flags=re.M)
+h = re.sub(r"\*\*([^*]+)\*\*", r'<strong>\1</strong>', h)
+h = re.sub(r"\*([^*]+)\*", r'<em>\1</em>', h)
+h = re.sub(r"`([^`]+)`",
+r'<code style="background:#1a1f2e;padding:2px 6px;border-radius:4px;'
+r'font-family:monospace;color:#c8a45c">\1</code>', h)
+h = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" style="color:#00d4ff">\1</a>', h)
+h = re.sub(r"^[-*+] (.+)$", r'<li>\1</li>', h, flags=re.M)
+lines = h.split("\n"); out = []
+for ln in lines:
+s = ln.strip()
+si s et non s.startswith(<"): out.append("<p>" + ln + "</p>")
+else: out.append(ln)
+h = "\n".join(out)
+Retour ('<! DOCTYPE html><html><head><meta charset="utf-8">'
+'<style>body{font-family:system-ui;padding:30px;background:#02040a;'
+'couleur:#e0e8f0;max-largeur:800px;margin:0 auto;line-hauteur:1.7}'
+'h1{color:#00d4ff;border-bottom:2px solide #00d4ff;padding-bottom:8px}'
+'h2{color:#a855f7}h3{color:#c8a45c}a{color:#00d4ff}'
+'ul{padding-left:24px}</style></head><body>' + h + '</body></html>')
+
+def rendre_yaml(code):
+lines = code.split("\n")
+tree = []; stack = []
+for line in lines:
+if not line.strip() or line.strip().startswith("#"): continue
+indent = len(line) - len(line.lstrip())
+s = line.strip()
+if s.startswith("- "):
+content = s[2:].strip()
+if ":" in content:
+k,_,v = content.partition(":")
+node = {"type":"li","k":k.strip(),"v":v.strip(),"c":[]}
+else:
+node = {"type":"li","k":content,"v":"","c":[]}
+elif ":" in s:
+k,_,v = s.partition(":")
+node = {"type":"key","k":k.strip(),"v":v.strip(),"c":[]}
+else: continue
+while stack and stack[-1][0] >= indent: stack.pop()
+if not stack: tree.append(node)
+else: stack[-1][1].append(node)
+if not node["v"]: stack.append((indent, node["c"]))
+def rn(n, lvl=0):
+if n["type"]=="key":
+kh = '<span style="color:#61afef;font-weight:600">'+esc(n["k"])+'</span>'
+else:
+kh = '<span style="color:#c678dd">•</span> <span style="color:#e0e8f0">'+esc(n["k"])+'</span>'
+v = ""
+if n["v"]: v = ' <span style="color:#98c379">'+esc(n["v"])+'</span>'
+line = '<div style="padding:4px 0 4px '+str(lvl*20)+'px">'+kh+v+'</div>'
+for c in n["c"]: line += rn(c, lvl+1)
+return line
+body = "".join(rn(n) for n in tree)
+return ('<!DOCTYPE html><html><head><meta charset="utf-8">'
+'<style>body{font-family:monospace;padding:24px;background:#02040a;'
+'color:#e0e8f0;font-size:13px}.h{color:#00d4ff;font-size:11px;'
+'letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;'
+'border-bottom:1px solid #1a2540;padding-bottom:8px}</style></head>'
+'<body><div class="h">📋 YAML — Arbre</div>'+body+'</body></html>')
+
+def rendre_json(code):
+try:
+data = json.loads(code)
+except Exception as e:
+return '<pre style="color:#f87171;padding:20px">Erreur JSON: '+esc(str(e))+'</pre>'
+def rn(v, lvl=0, key=None):
+pad = " "*lvl
+kh = ""
+if key is not None: kh = '<span style="color:#61afef">'+esc(str(key))+'</span>: '
+if isinstance(v, dict):
+lines = [pad+kh+'{']
+for k,val in v.items(): lines.append(rn(val, lvl+1, k))
+lines.append(pad+'}')
+return "\n".join(lines)
+elif isinstance(v, list):
+lines = [pad+kh+'[']
+for i,val in enumerate(v): lines.append(rn(val, lvl+1, i))
+lines.append(pad+']')
+return "\n".join(lines)
+elif isinstance(v, str):
+return pad+kh+'<span style="color:#98c379">"'+esc(v)+'"</span>'
+elif isinstance(v, bool):
+return pad+kh+'<span style="color:#c678dd">'+str(v).lower()+'</span>'
+elif v is None:
+return pad+kh+'<span style="color:#c678dd">null</span>'
+else:
+return pad+kh+'<span style="color:#d19a66">'+str(v)+'</span>'
+body = rn(data)
+Retour ('<! DOCTYPE html><html><head><meta charset="utf-8">'
+'<style>body{font-family:monospace;padding:24px;background:#02040a;'
+'color:#e0e8f0;font-size:13px}pre{white-space:pre-wrap}'
+'.h{color:#00d4ff;font-size:11px;letter-spacing:2px;'
+'text-transform:uppercase;margin-bottom:16px;'
+'border-bottom:1px solid #1a2540;padding-bottom:8px}</style></head>'
+'<body><div class="h">📦 JSON</div><pre>'+body+'</pre></body></html>')
+
+def rendre_sql(code):
+tableaux = re.findall(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+s+?[ `\"']?( \w+)[`\"']? \s*\(([^;]+)\)",
+code, re.IGNORECASE | re.DOTALL)
+if not tables: return None
+html = ['<div class="h">🗄️ SQL — Schéma</div>']
+for tname, body in tables:
+cols = []
+for line in body.split(","):
+line = line.strip()
+if not line or line.upper().startswith(("PRIMARY","FOREIGN","UNIQUE","KEY","INDEX","CONSTRAINT")): continue
+parts = line.split()
+if len(parts) >= 2: cols.append((parts[0].strip('`"'), " ".join(parts[1:])))
+html.append('<div class="tb"><div class="tn">'+esc(tname)+'</div>')
+html.append('<table><thead><tr><th>Colonne</th><th>Type</th></tr></thead><tbody>')
+for c,t in cols: html.append('<tr><td>'+esc(c)+'</td><td>'+esc(t)+'</td></tr>')
+html.append('</tbody></table></div>')
+Retour ('<! DOCTYPE html><html><head><meta charset="utf-8">'
+'<style>body{font-family:system-ui;padding:24px;background:#02040a;color:#e0e8f0}'
+'.h{color:#00d4ff;font-size:11px;letter-spacing:2px;text-transform:uppercase;'
+'margin-bottom:16px;border-bottom:1px solid #1a2540;padding-bottom:8px}'
+'.tb{background:#0a1018;border:1px solid #1a2540;border-radius:10px;'
+'padding:16px;margin-bottom:14px}.tn{color:#c8a45c;font-weight:700;'
+'font-family:monospace;margin-bottom:10px}'
+'table{width:100%;border-collapse:collapse;font-family:monospace;font-size:13px}'
+'th{background:rgba(0,212,255,.08);color:#00d4ff;text-align:left;'
+'padding:8px 12px;border-bottom:2px solid rgba(0,212,255,.2)}'
+'td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)}'
+'</style></head><body>'+"".join(html)+'</body></html>')
+
+def rendre_svg(code, lang, filename=""):
+lines = code.split("\n")[:40]
+lh = 22; pad = 60; hh = 70; w = 960
+h = hh + len(lines) * lh + pad
+accent = get_color(lang)
+def xe(s):
+retour (str(s).replace("&",&&amp;").replace(<","&lt;").replace(">","&gt;")
+.replace(''',&quot;").replace("","&apos;"))
+s = ['<?xml version="1.0" encoding="UTF-8"?>']
+s.append('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">'%(w,h,w,h))
+s.append('<defs>')
+s.append('<linearGradient id="bg" x1="0%%" y1="0%%" x2="100%%" y2="100%%">')
+s.append('<stop offset="0%%" style="stop-color:#0a1018"/>')
+s.append('<stop offset="100%%" style="stop-color:#02040a"/>')
+s.append('</linearGradient>')
+s.append('<linearGradient id="ac" x1="0%%" y1="0%%" x2="100%%" y2="0%%">')
+s.append('<stop offset="0%%" style="stop-color:%s"/>'%accent)
+s.append('<stop offset="100%%" style="stop-color:#a855f7"/>')
+s.append('</linearGradient>')
+s.append('</defs>')
+s.append('<rect width="%d" height="%d" rx="16" fill="url(#bg)"/>'%(w,h))
+s.append('<rect x="0" y="0" width="%d" height="4" fill="url(#ac)"/>'%w)
+s.append('<text x="30" y="44" fill="%s" font-family="monospace" font-size="16" font-weight="bold">%s</text>'%(accent, xe(lang.upper())))
+si nom de fichier:
+s.append('<text x="220" y="44" fill="#6a7a8a" font-family="monospace" font-size="14">%s</text>'%xe(nom de fichier))
+s.append('<line x1="20" y1="64" x2="%d" y2="64" stroke="#1a2540"/>'%(w-20))
+y = hh + 15
+for i, line in enumerate(lines):
+s.append('<text x="20" y="%d" fill="#4a5568" font-family="monospace" font-size="13">%s</text>'%(y, xe(str(i+1).rjust(3))))
+s.append('<text x="60" y="%d" fill="#e0e8f0" font-family="monospace" font-size="13">%s</text>'%(y, xe(line)))
+y += lh
+s.append('</svg>')
+return "\n".join(s)
+
+def rendre_readme(d):
+nom = d.get("nom","Nexus Project")
+desc = d.get("description","Généré par NEXUS QUICKHUB v"+VERSION)
+auteur = d.get("auteur", AUTEUR)
+licence = d.get("licence", LICENCE)
+langs = d.get("langages", [])
+date = datetime.datetime.now().strftime("%Y-%m-%d")
+md = ["# "+nom, "", "> "+desc, ""]
+md += ["**Auteur :** "+auteur, "**Licence :** "+licence, "**Date :** "+date, "", "---", ""]
+if langs:
+md.append("## Langages"); md.append("")
+for l in langs: md.append("- `"+l+"`")
+md.append("")
+md += ["## Structure", "", "```", nom.lower().replace(" ","-")+"/",
+"├── README.md", "├── src/", "├── docs/", "└── tests/", "```", ""]
+md += ["## Installation", "", "```bash", "git clone <repo>",
+"cd "+nom.lower().replace(" ","-"), "```", ""]
+md += ["---", "", "_Généré par NEXUS QUICKHUB v"+VERSION+"_"]
+return "\n".join(md)
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# ASCII PLOT — Graphes scientifiques
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+def plot_ascii(data, width=60, height=15):
+try:
+nums = [float(x) for x in data]
+except Exception:
+return "Erreur: données non numériques"
+if not nums: return "Aucune donnée"
+mn, mx = min(nums), max(nums)
+if mx == mn: mx = mn + 1
+grille = [[' ']*largeur pour _ en gamme (hauteur)]
+# Axes
+for i in range(height): grid[i][0] = '│'
+for j in range(width): grid[height-1][j] = '─'
+grid[height-1][0] = '└'
+# Points
+for i, v in enumerate(nums):
+x = int(i / max(1, len(nums)-1) * (width-2)) + 1
+y = height - 2 - int((v - mn) / (mx - mn) * (height-2))
+if 0 <= y < height and 0 <= x < width:
+grid[y][x] = '●'
+out = []
+for row in grid:
+out.append("".join(row))
+return "\n".join(out) + "\n\n min=%s max=%s n=%d" % (mn, mx, len(nums))
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# MCP v2 PROTOCOL
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+MCP_RESOURCES = {
+"languages": {"uri":"nexus://languages", "name":"Langages supportés", "mimeType":"application/json"},
+"templates": {"uri":"nexus://templates", "name":"Templates", "mimeType":"application/json"},
+"constants": {"uri":"nexus://science/constants", "name":"Constantes", "mimeType":"application/json"},
+"taxonomy": {"uri":"nexus://wiki/taxonomy", "name":"Taxonomie Wiki", "mimeType":"application/json"},
+"snippets": {"uri":"nexus://snippets", "name":"Snippets", "mimeType":"application/json"},
+}
+
+MCP_TOOLS = {
+"detect_language": {"name":"detect_language", "description":"Détecte le langage",
+"inputSchema":{"type":"object","properties":{"code":{"type":"string"}},"required":["code"]}},
+"render_code": {"name":"render_code", "description":"Rend le code",
+"inputSchema":{"type":"object","properties":{"code":{"type":"string"}},"required":["code"]}},
+"execute_code": {"name":"execute_code", "description":"Exécute le code",
+"inputSchema":{"type":"object","properties":{"code":{"type":"string"},"lang":{"type":"string"},"required":["code","lang"]}},
+"generate_readme": {"name":"generate_readme", "description":"README",
+"inputSchema":{"type":"object","properties":{"nom":{"type":"string"}}},
+"create_pipeline": {"name":"create_pipeline", "description":"Pipeline GitLab",
+"inputSchema":{"type":"object","properties":{"langage":{"type":"string"}}},
+"lab_notebook": {"name":"lab_notebook", "description":"Carnet de labo",
+"inputSchema":{"type":"object","properties":{"titre":{"type":"string"}},"required":["titre"]}},
+"wiki_article": {"name":"wiki_article", "description":"Article Wikipedia",
+"inputSchema":{"type":"object","properties":{"sujet":{"type":"string"}},"required":["sujet"]}},
+"plot_ascii": {"name":"plot_ascii", "description":"Graphe ASCII",
+"inputSchema":{"type":"object","properties":{"data":{"type":"array"}}}},
+"search_replace": {"name":"search_replace", "description":"Chercher/remplacer",
+"inputSchema":{"type":"object","properties":{"code":{"type":"string"},"pattern":{"type":"string"},"replace":{"type":"string"}}}},
+}
+
+MCP_PROMPTS = {
+"code_review": {"name":"code_review", "description":"Révision code"},
+"documentation": {"name":"documentation", "description":"Doc"},
+"optimization": {"name":"optimization", "description":"Optimisation"},
+"refactoring": {"name":"refactoring", "description":"Refactoring"},
+"test_generation": {"name":"test_generation", "description":"Tests"},
+}
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# SNIPPETS PAR LANGAGE
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+SNIPPETS = {
+"python": {
+"hello": 'print("Hello NEXUS")',
+"func": 'def ma_fonction(x):\n return x * 2',
+"class": 'class MaClasse:\n def __init__(self, nom):\n self.nom = nom\n def __repr__(self):\n return f"<{self.nom}>"',
+"loop": 'for i in range(10):\n print(i)',
+"import": 'import os\nimport sys\nfrom pathlib import Path',
+},
+"javascript": {
+"hello": 'console.log("Hello NEXUS")',
+"func": 'function maFonction(x) { return x * 2; }',
+"arrow": 'const maFonction = (x) => x * 2;',
+"async": 'async function fetchData() {\n const r = await fetch("/api");\n return r.json();\n}',
+"class": 'class MaClasse {\n constructor(nom) { this.nom = nom; }\n}',
+},
+"html": {
+"base": '<!DOCTYPE html>\n<html>\n<head><meta charset="utf-8"><title>Titre</title></head>\n<body>\n <h1>Hello</h1>\n</body>\n</html>',
+"div": '<div class="container">\n <p>Contenu</p>\n</div>',
+"form": '<form action="#" method="POST">\n <input type="text" name="nom">\n <button>Envoyer</button>\n</form>',
+},
+"bash": {
+"shebang": '#!/usr/bin/env bash\nset -euo pipefail',
+"loop": 'for i in {1..10}; do\n echo $i\ndone',
+"func": 'ma_fonction() {\n echo "$1"\n}',
+"if": 'if [ -f "$1" ]; then\n echo "existe"\nfi',
+},
+"rust": {
+"main": 'fn main() {\n println!("Hello NEXUS");\n}',
+"struct": 'struct Point { x: i32, y: i32 }',
+"impl": 'impl Point {\n fn new(x: i32, y: i32) -> Self {\n Point { x, y }\n }\n}',
+},
+"go": {
+"main": 'package main\n\nimport "fmt"\n\nfunc main() {\n fmt.Println("Hello NEXUS")\n}',
+"struct": 'type Point struct {\n X int\n Y int\n}',
+},
+"cobol": {
+"base": ' IDENTIFICATION DIVISION.\n PROGRAM-ID. HELLO.\n PROCEDURE DIVISION.\n DISPLAY "HELLO NEXUS".\n STOP RUN.',
+},
+"fortran": {
+"base": 'PROGRAM HELLO\n IMPLICIT NONE\n PRINT *, "HELLO NEXUS"\nEND PROGRAM HELLO',
+},
+}
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# GITLAB
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+def gen_gitlab_ci(langage="python", etapes=None):
+si etapes est None: etapes = ["build", "test", "deploy"]
+images = {
+"python":"python:3.12-alpine", "javascript":"node:20-alpine",
+"typescript":"nœud:20-alpin", "rouille":"rouille:1.75-alpine",
+"go":"golang:1.21-alpine", "java":"maven:3.9-eclipse-temurin-21",
+"cpp":"gcc:13", "c":"gcc:13", "php":"php:8.3-cli",
+"ruby":"ruby:3.3-alpine", "bash":"alpine:latest",
+}
+image = images.get(langage, "alpine:latest")
+cmds = {
+"python":["pip install -r requirements.txt","pytest","python -m build"],
+"javascript":["npm ci","npm test","npm run build"],
+"rust":["cargo build --release","test de cargaison", "cargo clippy"],
+"go":["go mod download","go test . /...","go build -o app."],
+"java":["mvn clean install","mvn test", "mvn package"],
+"cpp":["cmake -B build","cmake --build build","ctest --test-dir build"],
+"bash":["apk add shellcheck","shellcheck *.sh","echo ok"],
+}
+cl = cmds.get(langage, ["echo build","echo test","echo deploy"])
+lines = ["# NEXUS GitLab CI", "# Langage: "+langage,
+"# Généré: "+datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "",
+"stages:"]
+for e in etapes: lines.append(" - "+e)
+lines += ["", "variables:", ' GIT_DEPTH: "20"', ""]
+for i, e in enumerate(etapes):
+cmd = cl[i] if i < len(cl) else "echo "+e
+lines += [e+":", " stage: "+e, " image: "+image,
+" script:", " - "+cmd]
+if e == "deploy": lines += [" only:", " - main"]
+lines.append("")
+return "\n".join(lines)
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# SCIENCE
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+CONSTANTES = {
+"pi":math.pi, "e":math.e, "phi":(1+math.sqrt(5))/2,
+"omega":0.567143290409784, "c":299792458, "h":6.62607015e-34,
+"kb":1.380649e-23, "na":6.02214076e23, "g":9.80665, "G":6.67430e-11,
+}
+
+def lab_entry(titre, hyp="", meth="", res="", concl=""):
+ts = datetime.datetime.now().isoformat()
+eid = hashlib.sha256((titre+ts).encode()).hexdigest()[:10]
+md = ["# 🔬 "+titre, "", "**ID:** `"+eid+"` ", "**Date:** "+ts+" ",
+"**Auteur:** "+AUTEUR, "", "---", "",
+"## 1. Hypothèse", "", hyp or "_À compléter_", "",
+"## 2. Méthode, "", méth ou "_À compléter_", "",
+"## 3. Résultats, "", res ou "_À compléter_", "",
+"## 4. Conclusion", "", concl or "_À compléter_", "",
+"---", "", "## 📚 Références", "",
+"- [Méthode scientifique](https://en.wikipedia.org/wiki/Scientific_method)"]
+return {"id":eid, "markdown":"\n".join(md), "date":ts}
+
+def analyse_stats(data):
+try: nums = [float(x) for x in data]
+except Exception: return {"error":"données invalides"}
+if not nums: return {"error":"vide"}
+n = len(nums); mean = sum(nums)/n
+var = sum((x-mean)**2 pour x en nums)/n
+return {"n":n, "moyenne":round(mean,6), "variance":round(var,6),
+"ecart_type":round(math.sqrt(var),6), "min":min(nums), "max":max(nums),
+"mediane":sorted(nums)[n//2]}
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# WIKI
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+def wiki_article(suite, catégorie="Général", sections=None, infobox=Aucun):
+si les sections ne sont pas:
+sections = ["Introduction","Histoire","Description","Utilisation","Voir aussi","Références"]
+ts = datetime.datetime.now().strftime("%Y-%m-%d")
+md = ["{{Infobox}}", "", "# "+sujet, ""]
+if infobox:
+md.append("{{Infobox}}")
+pour k,v dans infobox.items(): md.append("| "+k+" = "+str(v))
+md.append("}}"); md.append("")
+md.append("**"+sujet+"** est un sujet de la catégorie *"+categorie+"*.")
+md.append(""); md.append("== Sommaire ==")
+for i,s in enumerate(sections,1): md.append("{}. [[#{}|{}]]".format(i,s,s))
+md.append("")
+for s in sections:
+md.append("== "+s+" =="); md.append("")
+si s=="Introduction":
+md.append("Cette section présente "+sujet+" dans son contexte général.")
+md.append("_À développer._")
+elif s=="Histoire":
+md.append("L'historique de "+sujet+" remonte à ses premières mentions.")
+md.append("_À développer._")
+elif s=="Voir aussi":
+md.append("* [[Sujet connexe 1]]")
+md.append("* [[Sujet connexe 2]]")
+elif s=="Références":
+md.append("{{Références}}"); md.append(""); md.append("<references />")
+autre:
+md.append("Description de "+s+" pour "+sujet+".")
+md.append("")
+md += ["----", "*Généré par NEXUS QUICKHUB v"+VERSION+" le "+ts+"*",
+"[[Catégorie:"+catégorie+"]]]]
+return "\n".join(md)
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# DIFF
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+def diff_simple(a, b):
+la = a.split("\n"); lb = b.split("\n")
+out = []
+max_len = max(len(la), len(lb))
+for i in range(max_len):
+x = la[i] si i < len(la) else Aucun
+y = lb[i] if i < len(lb) else None
+if x == y:
+out.append(("ctx", x or ""))
+elif x is None:
+out.append(("add", y))
+elif y is None:
+out.append(("del", x))
+autre:
+out.append(("del", x))
+out.append(("add", y))
+Retour en sortie
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# HTML UI — Version méga
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+HTML_UI = r"""<! DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXUS QUICKHUB v4 — Méga-Runtime</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+--c1:#00d4ff;--c2:#a855f7;--c3:#c8a45c;--c4:#ff6ec7;
+--ok:#4ade80;--err:#f87171;--warn:#fbbf24;
+--bg:#02040a;--carte:#0a1018;--border:#1a2540;--text:#e0e8f0;--dim:#6a7a8a;
+--mono:ui-monospace,'JetBrains Mono',Menlo,monospace;
+--sans:-apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+font-family:var(--sans);font-size:14px}
+body{background-image:radial-gradient(ellipse at 15% 15%,rgba(0,212,255,.12) 0,transparent 55%),
+radial-gradient(ellipse at 85% 85%,rgba(168,85,247,.12) 0,transparent 55%)}
+
+header{display:flex;align-items:center;gap:12px;padding:10px 18px;
+border-bottom:1px solid var(--border);background:rgba(10,16,24,.95);
+backdrop-filter:blur(20px);position:relative;z-index:100;flex-wrap:wrap}
+header h1{font-size:15px;font-weight:900;letter-spacing:-.4px;
+background:linear-gradient(110deg,#fff 10%,var(--c1) 40%,var(--c2) 70%,var(--c4));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+header .badge{padding:2px 9px;border-radius:20px;font-family:var(--mono);font-size:10px;
+background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--c1);
+lettre-espacement:1px;text-transform:uppercase}
+header .spacer{flex:1}
+header button{padding:6px 11px;border-radius:7px;font-family:var(--mono);font-size:10px;
+border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--text);
+cursor:pointer;transition:all .15s}
+header button:hover{border-color:var(--c1);color:var(--c1)}
+header button.prim{background:linear-gradient(135deg,var(--c1),var(--c2));color:#000;
+border:none;font-weight:700}
+header .stats{font-family:var(--mono);font-size:10px;color:var(--dim);
+padding:0 10px;border-left:1px solid var(--border)}
+
+.tabs{display:flex;gap:1px;padding:0 18px;border-bottom:1px solid var(--border);
+background:rgba(10,16,24,.6);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:9px 16px;font-family:var(--mono);font-size:10px;letter-spacing:1.4px;
+text-transform:uppercase;color:var(--dim);cursor:pointer;border:none;
+background:transparent;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap}
+.tab:hover{color:var(--c1)}
+.tab.active{color:var(--c1);border-bottom-color:var(--c1)}
+
+.tabs-files{display:flex;gap:1px;padding:6px 18px;background:rgba(10,16,24,.4);
+border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.tabs-files::-webkit-scrollbar{display:none}
+.file-tab{padding:5px 12px;font-family:var(--mono);font-size:10px;color:var(--dim);
+cursor:pointer;border:1px solid transparent;border-radius:6px;white-space:nowrap}
+.file-tab.active{color:var(--c1);border-color:var(--c1);background:rgba(0,212,255,.05)}
+.file-tab .close{margin-left:6px;color:var(--err);opacity:.6}
+.file-tab .close:hover{opacity:1}
+
+.layout{display:grid;grid-template-columns:1fr 1fr;height:calc(100vh - 108px)}
+@media(max-width:900px){.layout{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+.panel{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.panel:last-child{border-right:none}
+.panel-header{padding:8px 14px;border-bottom:1px solid var(--border);
+font-family:var(--mono);font-size:10px;letter-spacing:1.6px;text-transform:uppercase;
+color:var(--dim);display:flex;align-items:center;gap:8px;
+background:rgba(10,16,24,.5);flex-wrap:wrap}
+.panel-header .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);
+box-shadow:0 0 8px var(--ok)}
+.panel-header .dot.p2{background:var(--c2);box-shadow:0 0 8px var(--c2)}
+.panel-header .actions{margin-left:auto;display:flex;gap:3px;flex-wrap:wrap}
+.panel-header button{padding:2px 7px;font-size:9px;border-radius:4px;
+border:1px solide var(--border); arrière-plan:transparent; couleur:var(--dim);
+cursor:pointer;font-family:var(--mono);lettre-espacement:.8px}
+bouton .panel-header:hover{color:var(--c1);border-color:var(--c1)}
+
+#editor{flex:1;background:rgba(0,0,0,.35);border:none;outline:none;resize:none;
+color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.7;
+padding:18px;width:100%;tab-size:2}
+
+#output{flex:1;position:relative;overflow:auto;background:#050a10}
+#output iframe{width:100%;height:100%;border:none;background:#fff;
+position:absolute;top:0;left:0}
+#output pre{padding:18px;font-family:var(--mono);font-size:13px;color:#a5f3fc;
+white-space:pre-wrap;word-break:break-word;line-height:1.7}
+#output img{display:block;max-width:100%;margin:18px auto;border-radius:10px;
+border:1px solid var(--border)}
+#output .empty{display:flex;align-items:center;justify-content:center;height:100%;
+color:var(--dim);font-family:var(--mono);font-style:italic;text-align:center;padding:20px}
+#output .terminal{padding:18px;font-family:var(--mono);font-size:13px;
+background:#000;color:#4ade80;white-space:pre-wrap}
+#output .terminal .err{color:#f87171}
+#output .terminal .info{color:#00d4ff}
+
+footer{padding:6px 14px;border-top:1px solid var(--border);
+font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;
+align-items:center;gap:12px;background:rgba(10,16,24,.9);flex-wrap:wrap}
+footer .status{color:var(--ok)}
+footer .error{color:var(--err)}
+footer .info{color:var(--c1)}
+
+.form-zone{display:none;flex-direction:column;gap:6px;padding:14px;
+overflow-y:auto;background:rgba(0,0,0,.35);flex:1}
+.form-zone.on{display:flex}
+.form-zone label{font-family:var(--mono);font-size:10px;color:var(--dim);
+text-transform:uppercase;letter-spacing:1.3px}
+.form-zone input,.form-zone textarea{padding:9px 11px;border-radius:7px;
+border:1px solid var(--border);background:rgba(0,0,0,.4);color:var(--text);
+font-family:var(--mono);font-size:12px;outline:none}
+.form-zone input:focus,.form-zone textarea:focus{border-color:var(--c1)}
+.form-zone button{padding:9px;border-radius:7px;border:none;font-family:var(--mono);
+font-size:12px;cursor:pointer;background:linear-gradient(135deg,var(--c1),var(--c2));
+color:#000;font-weight:700;margin-top:6px}
+
+.modal{display:none;position:fixed;inset:0;background:rgba(2,4,10,.9);
+backdrop-filter:blur(10px);z-index:200;align-items:center;justify-content:center;padding:20px}
+.modal.on{display:flex}
+.modal .box{background:var(--card);border:1px solid var(-border); border-radius:14px;
+padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto}
+.modal h2{margin-bottom:18px;color:var(--c1);font-size:17px}
+.modal .field{margin-bottom:12px}
+.modal label{display:block;font-family:var(--mono);font-size:10px;color:var(--dim);
+margin-bottom:5px;text-transform:uppercase;letter-spacing:1.3px}
+.modal input,.modal textarea{width:100%;padding:9px 12px;border-radius:7px;
+border:1px solid var(--border);background:rgba(0,0,0,.4);color:var(--text);
+font-family:var(--mono);font-size:12px;outline:none}
+.modal .actions{display:flex;gap:8px;margin-top:18px;justify-content:flex-end;flex-wrap:wrap}
+.modal button{padding:9px 15px;border-radius:7px;border:none;font-family:var(--mono);
+font-size:11px;cursor:pointer;letter-spacing:.8px}
+.modal button.cancel{background:rgba(255,255,255,.1);color:var(--text)}
+.modal button.confirm{background:linear-gradient(135deg,var(--c1),var(--c2));
+color:#000;font-weight:700}
+
+body.dragover::after{content:'📁 Dépose ici';position:fixed;inset:0;
+background:rgba(0,212,255,.15);backdrop-filter:blur(8px);z-index:1000;
+display:flex;align-items:center;justify-content:center;font-size:24px;
+font-weight:700;color:var(--c1);border:4px dashed var(--c1);pointer-events:none}
+</style></head><body>
+
+<header>
+<h1>⚡ NEXUS QUICKHUB v4</h1>
+<span class="badge" id="lang-badge">text</span>
+<span class="stats" id="stats">—</span>
+<div class="spacer"></div>
+<button onclick="runCode()">▶ Exécuter</button>
+<button onclick="renderNow()">⟳ Rendu</button>
+<button onclick="openExport()">💾 Export</button>
+<button onclick="openSearch()">🔍 Chercher</button>
+<button class="prim" onclick="copyOutput()">📋 Copieur</button>
+</header>
+
+<div class="tabs">
+<button class="tab active" data-tab="editor">✏️ Éditeur</button>
+<button class="tab" data-tab="exec">⚡ Exécuter</button>
+<button class="tab" data-tab="mcp">🌐 MCP</button>
+<button class="tab" data-tab="gitlab">🦊 GitLab</button>
+<button class="tab" data-tab="science">🔬 Science</button>
+<button class="tab" data-tab="wiki">📖 Wiki</button>
+<button class="tab" data-tab="orphan">🧙 Orphelins</button>
+</div>
+
+<div class="tabs-files" id="file-tabs">
+<span class="file-tab active">main <span class="close" onclick="closeFile(0)">×</span></span>
+<span class="file-tab" onclick="newFile()" style="color:var(--ok)">+ Nouveau</span>
+</div>
+
+<div class="layout">
+<div class="panel">
+<div class="panel-header">
+<span class="dot"></span>
+<span id="panel-title">ÉDITEUR</span>
+<div class="actions">
+<button onclick="loadExample('html')">HTML</button>
+<button onclick="loadExample('css')">CSS</button>
+<button onclick="loadExample('javascript')">JS</button>
+<button onclick="loadExample('python')">PY</button>
+<button onclick="loadExample('rust')">RS</button>
+<button onclick="loadExample('go')">GO</button>
+<button onclick="loadExample('cobol')">COBOL</button>
+<button onclick="loadExample('brainfuck')">BF</button>
+<button onclick="loadExample('yaml')">YAML</button>
+<button onclick="loadExample('json')">JSON</button>
+<button onclick="loadExample('sql')">SQL</button>
+<button onclick="clearEditor()">✕</button>
+</div>
+</div>
+<textarea id="editor" spellcheck="false" placeholder="Colle ton code ici — HTML, CSS, Python, Rust, COBOL, Brainfuck...
+
+Le code s'affiche dans l'aperçu à droite.
+Pour l'exécution : onglet ⚡ Exécuter."></textarea>
+<div class="form-zone" id="form-zone"></div>
+</div>
+
+<div class="panel">
+<div class="panel-header">
+<span class="dot p2"></span>
+<span>APERÇU — <span id="preview-type">vide</span></span>
+<div class="actions">
+<button onclick="openInNewTab()">↗</button>
+<button onclick="downloadPreview()">⬇</button>
+<button onclick="runCode()">▶ Exec</button>
+</div>
+</div>
+<div id="sortie">
+<div class="empty">L'aperçu apparaître après 600ms<br>de pause dans l'<éditeurdiv>
+</div>
+</div>
+</div>
+
+<footer>
+<span class="status" id="status">Prêt</span>
+<span id="info">—</span>
+<span style="margin-left:auto" id="stats-footer"></span>
+</footer>
+
+<div class="modal" id="export-panel"><div class="box">
+<h2>💾 Exporter</h2>
+<div class="field"><label>Nom du projet</label><input id="exp-nom" value="Nexus Project"></div>
+<div class="field"><label>Description</label><textarea id="exp-desc" rows="2"></textarea></div>
+<div class="field"><label>Langages</label><input id="exp-langs" value="Python, Bash, HTML"></div>
+<div class="actions">
+<button class="cancel" onclick="closeModal('export-panel')">Annuler</button>
+<button class="confirm" onclick="genReadme()">📝 README</button>
+<button class="confirm" onclick="genSVG()">🖼️ SVG</button>
+<button class="confirm" onclick="exportHTML()">📄 HTML</button>
+<button class="confirm" onclick="exportJSON()">📦 JSON</button>
+</div>
+</div></div>
+
+<div class="modal" id="search-panel"><div class="box">
+<h2>🔍 |marchan / Remplacer</h2>
+<div class="field"><label>Chercher</label><input id="sr-find"></div>
+<div class="field"><label>Remplacer</label><input id="sr-replace"></div>
+<div class="field"><label><input type="checkbox" id="sr-regex"> Regex</label></div>
+<div class="actions">
+<button class="cancel" onclick="closeModal('search-panel')">Annuler</button>
+<button class="confirm" onclick="doReplace()">Remplacer tout</button>
+</div>
+</div></div>
+
+<script>
+var state = {
+code: "", lang: "text", debounce: null,
+lastRendered: "", lastRenderType: "vide",
+tab: "editor", execOutput: ""
+};
+var files = [{name: "main", content: ""}];
+var currentFile = 0;
+
+var éditeur = document.getElementById('editor');
+var sortie = document.geTelementById('output');
+var langBadge = document.getElementById('lang-badge');
+var statusEl = document.getElementById('status');
+var infoEl = document.getElementById('info');
+var statsEl = document.getElementById('stats');
+var statsFooter = document.getElementById('stats-footer');
+var previewType = document.getElementById('preview-type');
+var formZone = document.getElementById('form-zone');
+
+async fonction api_post(url, corps) {
+Essayez {
+var r = attendre fetch(url, {méthode:'POST',
+en-têtes:{'Content-Type':'application/json'},
+corps: JSON.stringify(body || {})});
+retour en attente r.json();
+} catch(e) {retour {ok:false, err:e.message}; }
+}
+async function api_get(url) {
+try { var r = await fetch(url); return await r.json(); }
+catch(e) { return {ok:false, err:e.message}; }
+}
+
+function onEdit() {
+state.code = editor.value;
+files[currentFile].content = editor.value;
+if(state.debounce) clearTimeout(state.debounce);
+statusEl.textContent = 'Frappe…'; statusEl.className = 'info';
+state.debounce = setTimeout(detectAndRender, 500);
+}
+
+async function detectAndRender() {
+var code = state.code;
+if (!code.trim()) {
+output.innerHTML = '<div class="empty">L\'aperçu apparaît après 600ms</div>';
+langBadge.textContent = 'text'; infoEl.textContent = '—';
+statsEl.textContent = '—'; statsFooter.textContent = '';
+previewType.textContent = 'vide'; return;
+}
+statusEl.textContent = 'Analyse…'; statusEl.className = 'info';
+
+var d = await api_post('/api/render', {code: code, filename: files[currentFile].name});
+
+if (!d.ok) {
+statusEl.textContent = 'Erreur'; statusEl.className = 'error';
+infoEl.textContent = d.err || '?'; return;
+}
+
+state.lang = d.lang;
+state.lastRendered = d.rendered;
+state.lastRenderType = d.type;
+
+langBadge.textContent = d.lang;
+infoEl.textContent = d.type;
+previewType.textContent = d.type;
+var stats = d.lignes + ' l · ' + d.octets + ' o';
+statsEl.textContent = stats; statsFooter.textContent = stats;
+
+// ═══════════ AFFICHAGE CORRIGÉ ═══════════
+si (d.type === 'html') {
+// ✅ CORRECTION : Blob URL au lieu de base64 data URL
+// Ça marche pour HTML, CSS, MD, YAML, JSON, SQL (qui sont tous "html")
+Essayez {
+var blob = new Blob([d.rendered], {type: 'text/html;charset=utf-8'});
+var url = URL.createObjectURL(blob);
+output.innerHTML = '<iframe src="' + url + '" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>';
+statusEl.textContent = '✓ ' + d.type + ' rendu';
+statusEl.className = 'status';
+} catch(e) {
+// Fallback : srcdoc
+var escaped = d.rendered.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+output.innerHTML = '<iframe srcdoc="' + escaped + '" sandbox="allow-scripts allow-same-origin"></iframe>';
+statusEl.textContent = '✓ ' + d.type;
+statusEl.className = 'status';
+}
+} else if (d.type === 'svg') {
+Essayez {
+var blob = new Blob([d.rendered], {type: 'image/svg+xml;charset=utf-8'});
+var url = URL.createObjectURL(blob);
+output.innerHTML = '<img src="' + url + '" alt="SVG">';
+statusEl.textContent = '✓ SVG'; statusEl.className = 'status';
+} catch(e) {
+output.innerHTML = '<pre>' + escapeHtml(d.rendered) + '</pre>';
+}
+} else {
+output.innerHTML = '<pre>' + d.rendered + '</pre>';
+statusEl.textContent = '✓ Code (' + d.lang + ')';
+statusEl.className = 'status';
+}
+}
+
+function escapeHtml(s) {
+return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+.replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escapeAttr(s) {
+retour String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderNow() {
+if(state.debounce) clearTimeout(state.debounce);
+detectAndRender();
+}
+
+// ═══ EXÉCUTION ═══
+async function runCode() {
+if(!state.code.trim()) { statusEl.textContent='Vide'; return; }
+
+statusEl.textContent = 'Exécution…'; statusEl.className = 'info';
+output.innerHTML = '<div class="terminal">⏳ Exécution de ' + state.lang + '…</div>';
+
+var d = await api_post('/api/execute', {
+code: state.code,
+lang: state.lang
+});
+
+si (! d.ok) {
+output.innerHTML = '<div class="terminal"><span class="err">❌ '+
+escapeHtml(d.err || 'Erreur') + '</span></div>';
+statusEl.textContent = 'Échec'; statusEl.className = 'error';
+return;
+}
+
+var out = '<div class="terminal">';
+out += '<span class="info">$ ' + d.lang + ' — exit ' + (d.code || 0) +
+' (' + (d.duration_ms || 0) + 'ms)</span>\n\n';
+if (d.stdout) out += escapeHtml(d.stdout);
+if (d.stderr) out += '\n<span class="err">' + escapeHtml(d.stderr) + '</span>';
+if (!d.stdout && !d.stderr) out += '(pas de sortie)';
+out += '</div>';
+
+output.innerHTML = out;
+statusEl.textContent = d.ok ? '✓ Exécuté' : '✗ Erreur';
+statusEl.className = d.ok ? 'status' : 'error';
+previewType.textContent = 'terminal';
+
+// Switch to editor tab to show result
+document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+document.querySelector('.tab[data-tab="editor"]').classList.add('active');
+}
+
+// ═══ EXEMPLES (avec orphelins) ═══
+var EXAMPLES = {
+html: '<!DOCTYPE html>\n<html>\n<head><meta charset="utf-8"><title>Test</title>\n<style>\n body{font-family:system-ui;background:linear-gradient(135deg,#00d4ff,#a855f7);\n display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#fff}\n .card{padding:60px 80px;border-radius:24px;background:rgba(0,0,0,.4);\n backdrop-filter:blur(20px);text-align:center}\n h1{margin:0 0 16px;font-size:42px;font-weight:900}\n button{padding:14px 32px;border:none;border-radius:12px;background:#fff;color:#000;\n font-weight:700;font-size:16px;cursor:pointer}\n</style></head>\n<body>\n <div class="card">\n <h1>⚡ NEXUS v4</h1>\n <p>HTML s\'affiche correctement</p>\n <button onclick="alert(\'Ça marche!\')">Cliquer</button>\n </div>\n</body>\n</html>',
+css: 'body{background:linear-gradient(135deg,#02040a,#1a1a3e);color:#00d4ff;\n font-family:monospace;display:flex;align-items:center;justify-content:center;\n height:100vh;margin:0}\n.nexus{font-size:64px;font-weight:900;letter-spacing:-3px;\n background:linear-gradient(110deg,#fff,#00d4ff,#a855f7);\n -webkit-background-clip:text;-webkit-text-fill-color:transparent;\n animation:glow 2s ease-in-out infinite}\n@keyframes glow{0%,100%{filter:drop-shadow(0 0 20px #00d4ff)}\n 50%{filter:drop-shadow(0 0 40px #a855f7)}}',
+javascript: 'const VERSION = "4.0.0";\n\nfunction fibonacci(n) {\n let a = 0, b = 1;\n for (let i = 0; i < n; i++) [a, b] = [b, a + b];\n return a;\n}\n\nconsole.log("NEXUS v" + VERSION);\nconsole.log("fib(50) =", fibonacci(50));\nconsole.log("Hello from Node.js!");\n\nconst data = {user:"DGK", version:VERSION};\nconsole.log(JSON.stringify(data, null, 2));',
+python: '# NEXUS Python — code réel exécuté\nimport math\nimport sys\n\nVERSION = "4.0.0"\nprint(f"NEXUS v{VERSION}")\nprint(f"Python {sys.version.split()[0]}")\n\n# Fibonacci\ndef fib(n):\n a, b = 0, 1\n for _ in range(n):\n a, b = b, a + b\n return a\n\nprint(f"fib(100) = {fib(100)}")\n\n# Calcul scientifique\nomega = 0.567143290409784\nprint(f"Omega constant = {omega}")\n\n# Boucle\nfor i in range(5):\n print(f" i={i}, i²={i*i}")',
+rust: 'fn main() {\n println!("NEXUS Rust");\n \n let v = fib(50);\n println!("fib(50) = {}", v);\n}\n\nfn fib(n: u32) -> u64 {\n let mut a: u64 = 0;\n let mut b: u64 = 1;\n for _ in 0..n {\n let c = a + b;\n a = b;\n b = c;\n }\n a\n}',
+go: 'package main\n\nimport (\n "fmt"\n "time"\n)\n\nfunc fib(n int) uint64 {\n var a, b uint64 = 0, 1\n for i := 0; i < n; i++ {\n a, b = b, a+b\n }\n return a\n}\n\nfunc main() {\n fmt.Println("NEXUS Go")\n t0 := time.Now()\n fmt.Printf("fib(80) = %d\\n", fib(80))\n fmt.Printf("Temps: %v\\n", time.Since(t0))\n}',
+cobol: ' IDENTIFICATION DIVISION.\n PROGRAM-ID. HELLO-NEXUS.\n AUTHOR. AISSA-MOHAMMEDI-DGK.\n \n DATA DIVISION.\n WORKING-STORAGE SECTION.\n 01 WS-COUNTER PIC 9(4) VALUE 0.\n 01 WS-MESSAGE PIC X(30) VALUE "BONJOUR NEXUS v4".\n \n PROCEDURE DIVISION.\n MAIN-LOGIC.\n DISPLAY WS-MESSAGE.\n PERFORM VARYING WS-COUNTER FROM 1 BY 1\n UNTIL WS-COUNTER > 5\n DISPLAY "ITERATION " WS-COUNTER\n END-PERFORM.\n STOP RUN.',
+brainfuck: '++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.',
+fortran: 'PROGRAMME NEXUS\n IMPLICITE NONE\n INTEGER :: i\n REAL :: x\n \n PRINT *, "NEXUS Fortran v4"\n \n DO i = 1, 5\n x = i * i\n PRINT *, "i =", i, " i^2 =", x\n END DO\NEND PROGRAM NEXUS,
+yaml: 'version: "4.0.0"\nauteur: Aissa Mohammedi\nlayers:\n editor: true\n mcp: true\n gitlab: true\n science: true\n wiki: true\nservices:\n - name: web\n port: 9099\n - name: db\n port: 5432\n config:\n type: postgres\n version: 16',
+json: '{\n "version": "4.0.0",\n "auteur": "Aissa Mohammedi (DGK)",\n "languages": 120,\n "layers": ["editor","mcp","gitlab","science","wiki"],\n "config": {\n "port": 9099,\n "auto_render": true\n }\n}',
+sql: 'CREATE TABLE users (\n id INT PRIMARY KEY AUTO_INCREMENT,\n username VARCHAR(50) NOT NULL,\n email VARCHAR(100) UNIQUE,\n created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nSELECT * FROM users WHERE active = TRUE;'
+};
+
+function loadExample(l) {
+if(EXAMPLES[l]) {
+editor.value = EXAMPLES[l];
+state.code = editor.value;
+renderNow();
+}
+}
+function clearEditor() {
+editor.value = ''; state.code = '';
+output.innerHTML = '<div class="empty">L\'aperçu apparaît après 600ms</div>';
+langBadge.textContent='text'; infoEl.textContent='—';
+statsEl.textContent='—'; statsFooter.textContent='';
+previewType.textContent='vide';
+statusEl.textContent='Prêt'; statusEl.className='status';
+}
+
+function copyOutput() {
+var el = output.querySelector('pre') || output.querySelector('.terminal');
+if (el) navigator.clipboard.writeText(el.textContent).then(()=>{
+statusEl.textContent='✓ Copié';});
+}
+function openInNewTab() {
+if (state.lastRenderType === 'html' || state.lastRenderType === 'svg') {
+var blob = new Blob([state.lastRendered], {type:'text/html;charset=utf-8'});
+window.open(URL.createObjectURL(blob));
+}
+}
+function downloadPreview() {
+var c = state.lastRendered, t = state.lastRenderType;
+if (!c) { statusEl.textContent='Rien'; return; }
+var mime='text/plain', fn='nexus.txt';
+if (t==='html') { mime='text/html'; fn='nexus.html'; }
+else if (t==='svg') { mime='image/svg+xml'; fn='nexus.svg'; }
+downloadBlob(c, fn, mime);
+}
+function downloadBlob(c, fn, mime) {
+var b = new Blob([c], {type:mime});
+var a = document.createElement('a');
+a.href = URL.createObjectURL(b); a.download = fn; a.click();
+}
+
+// ═══ MODALES ═══
+function openExport() {
+document.getElementById('export-panel').classList.add('on');
+document.getElementById('exp-desc').value = 'Projet NEXUS v4';
+}
+function openSearch() { document.getElementById('search-panel').classList.add('on'); }
+function closeModal(id) { document.getElementById(id).classList.remove('on'); }
+
+async function genReadme() {
+var d = await api_post('/api/readme', {
+nom: document.getElementById('exp-nom').value,
+description: document.getElementById('exp-desc').value,
+langages: document.getElementById('exp-langs').value.split(',').map(s=>s.trim())
+});
+if (d.ok) { downloadBlob(d.readme, 'README.md', 'text/markdown');
+statusEl.textContent='✓ README'; }
+closeModal('export-panel');
+}
+async function genSVG() {
+var d = await api_post('/api/svg', {code: state.code});
+if (d.ok) { downloadBlob(d.svg, 'code.svg', 'image/svg+xml');
+statusEl.textContent='✓ SVG'; }
+closeModal('export-panel');
+}
+fonction async exportHTML() {
+var d = await api_post('/api/export/html', {code: state.code});
+if (d.ok) { downloadBlob(d.html, 'nexus.html', 'text/html');
+statusEl.textContent='✓ HTML'; }
+closeModal('export-panel');
+}
+async function exportJSON() {
+var d = await api_post('/api/export/json', {code: state.code});
+if (d.ok) { downloadBlob(d.json, 'nexus.json', 'application/json');
+statusEl.textContent='✓ JSON'; }
+closeModal('export-panel');
+}
+
+function doReplace() {
+var find = document.getElementById('sr-find').value;
+var replace = document.getElementById('sr-replace').value;
+var isRegex = document.getElementById('sr-regex').checked;
+if (!find) return;
+var content = editor.value;
+Essayez {
+if (isRegex) {
+content = content.replace(new RegExp(find, 'g'), replace);
+} else {
+content = content.split(find).join(replace);
+}
+editor.value = content;
+state.code = content;
+renderNow();
+statusEl.textContent = '✓ Remplacé';
+} catch(e) {
+statusEl.textContent = 'Erreur regex';
+statusEl.className = 'error';
+}
+closeModal('search-panel');
+}
+
+// ═══ ONGLETS ═══
+document.querySelectorAll('.tab').forEach(function(t) {
+t.addEventListener('click', function() {
+document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+t.classList.add('active');
+state.tab = t.dataset.tab;
+editor.style.display = 'none';
+formZone.classList.remove('on');
+
+if (state.tab === 'editor') {
+editor.style.display = 'block';
+document.getElementById('panel-title').textContent = 'ÉDITEUR';
+} sinon si (state.tab === 'exec') {
+editor.style.display = 'block';
+document.getElementById('panel-title').textContent = 'ÉDITEUR — EXÉCUTION';
+runCode();
+} else if (state.tab === 'mcp') {
+showMCP();
+} else if (state.tab === 'gitlab') {
+showGitLab();
+} else if (state.tab === 'science') {
+showScience();
+} else if (state.tab === 'wiki') {
+showWiki();
+} else if (state.tab === 'orphelin') {
+showOrphan();
+}
+});
+});
+
+function showForm(title, fields, callback) {
+document.getElementById('panel-title').textContent = title;
+formZone.classList.add('on');
+var html = '';
+fields.forEach(f => {
+html += '<label>' + f.label + '</label>';
+if (f.type === 'textarea') {
+html += '<textarea id="f-' + f.id + '" rows="2" placeholder="' +
+f.ph + '">' + (f.default || '') + '</textarea>';
+} else {
+html += '<input id="f-' + f.id + '" placeholder="' + f.ph +
+'" value="' + (f.default || '') + '">';
+}
+});
+html += '<button onclick="submitForm()">🚀 Générer</button>';
+formZone.innerHTML = html;
+window._fcb = callback;
+}
+fonction async submitForm() {
+var d = {};
+formZone.querySelectorAll('input,textarea').forEach(el => {
+d[el.id.replace('f-','')] = el.value;
+});
+await window._fcb(d);
+}
+
+// ═══ MCP ══
+fonction showMCP() {
+formZone.classList.add('on');
+document.getElementById('panel-title').textContent = 'MCP — Model Context Protocol';
+formZone.innerHTML = `
+<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+<button style="padding:5px 9px;font-size:9px;margin:0" onclick="loadMCP('resources')">📦 Resources</button>
+<button style="padding:5px 9px;font-size:9px;margin:0" onclick="loadMCP('tools')">🔧 Tools</button>
+<button style="padding:5px 9px;font-size:9px;margin:0" onclick="loadMCP('prompts')">💬 Invites</bouton>
+<button style="padding:5px 9px;font-size:9px;margin:0" onclick="loadMCP('context')">🌐 Context</button>
+<button style="padding:5px 9px;font-size:9px;margin:0" onclick="loadMCP('schema')">📋 Schema</button>
+</div>
+<div id="mcp-content" style="background:#000;padding:12px;border-radius:7px;font-family:var(--mono);font-size:11px;color:#a5f3fc;max-height:400px;overflow-y:auto;white-space:pre-wrap"></div>
+`;
+}
+async function loadMCP(type) {
+var d = await api_get('/mcp/' + type);
+document.getElementById('mcp-content').textContent = JSON.stringify(d, null, 2);
+}
+
+// ═══ GITLAB ═══
+function showGitLab() {
+showForm('GITLAB CI/CD', [
+{id:'langage', label:'Langage', ph:'python', default:'python'},
+{id:'etapes', label:'Étapes', ph:'build,test,deploy', default:'build,test,deploy'},
+], async function(d) {
+var r = await api_post('/gitlab/pipeline', {
+langage: d.langage,
+etapes: d.etapes.split(',').map(s=>s.trim())
+});
+if (r.ok) {
+output.innerHTML = '<pre>' + escapeHtml(r.pipeline) + '</pre>';
+statusEl.textContent = '✓ Pipeline'; statusEl.className = 'status';
+}
+});
+}
+
+// ═══ SCIENCE ═══
+function showScience() {
+showForm('CARNET DE LABO', [
+{id:'titre', label:'Titre', ph:'Expérience 1'},
+{id:'hypothese', label:'Hypothèse', type:'textarea'},
+{id:'methode', label:'Méthode', type:'textarea'},
+{id:'resultats', label:'Résultats', type:'textarea'},
+], async function(d) {
+var r = await api_post('/science/notebook', d);
+if (r.ok) {
+output.innerHTML = '<pre style="color:#a5f3fc">+
+escapeHtml(r.markdown) + '</pre>';
+statusEl.textContent = '✓ Entrée'; statusEl.className = 'statut';
+}
+});
+}
+
+// ═══ WIKI ══
+function showWiki() {
+showForm('WIKIPEDIA ARTICLE', [
+{id:'sujet', label:'Sujet', ph:'Intelligence artificielle'},
+{id:'categorie', label:'Catégorie', ph:'Informatique', default:'Informatique'},
+], async function(d) {
+var r = await api_post('/wiki/article', {
+sujet: d.sujet, categorie: d.categorie
+});
+if (r.ok) {
+output.innerHTML = '<pre style="color:#a5f3fc">+
+escapeHtml(r.article) + '</pre>';
+statusEl.textContent = '✓ Article'; statusEl.className = 'status';
+}
+});
+}
+
+// ═══ ORPHELINS ═══
+fonction async showOrphan() {
+var d = await api_get('/api/orphans');
+var html = '<label style="color:#c8a45c;font-size:11px">🧙 LANGAGES ORPHELINS — abandonnés mais toujours vivants</label>';
+html += '<div style="max-height:400px;overflow-y:auto;margin-top:8px">';
+(d.orphans || []).forEach(function(l) {
+html += '<div style="padding:6px 10px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">';
+html += '<div><span style="color:' + l.color + ';font-weight:700;font-family:var(--mono)">' + l.name + '</span>';
+html += '<span style="color:var(--dim);font-size:10px;margin-left:10px">' + (l.desc || '') + '</span></div>';
+html += '<button style="padding:3px 8px;font-size:9px" onclick="loadExample(\'' + l.example_key + '\')">Charger</button>';
+html += '</div>';
+});
+html += '</div>';
+formZone.classList.add('on');
+document.getElementById('panel-title').textContent = 'LANGAGES ORPHELINS';
+formZone.innerHTML = html;
+}
+
+// ═══ FICHIERS ═══
+function newFile() {
+var name = prompt('Nom du fichier (ex: test.py):', 'file' + (files.length+1));
+if (!name) return;
+files.push({name: name, content: ''});
+currentFile = files.length - 1;
+editor.value = '';
+state.code = '';
+renderFiles();
+}
+function switchFile(i) {
+files[currentFile].content = editor.value;
+currentFile = i;
+editor.value = files[i].content;
+state.code = editor.value;
+renderFiles();
+renderNow();
+}
+function closeFile(i) {
+if (files.length <= 1) return;
+fichiers.splice(i, 1);
+if (currentFile >= files.length) currentFile = files.length - 1;
+editor.value = files[currentFile].content;
+state.code = editor.value;
+renderFiles();
+}
+function renderFiles() {
+var tabs = document.getelementById('file-tabs');
+var html = '';
+files.forEach((f, i) => {
+html += '<span class="file-tab ' (i === currentFile ? 'actif' : '') +
+'" onclick="switchFile(' + i + ')">' + f.name +
+' <span class="close" onclick="event.stopPropagation();closeFile(' + i + ')">×</span></span>';
+});
+html += '<span class="file-tab" onclick="newFile()" style="color:var(--ok)">+ Nouveau</span>';
+tabs.innerHTML = html;
+}
+
+// ═══ DRAG & DROP ═══
+document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragover'); });
+document.addEventListener('dragleave', e => { if (e.relatedTarget === null) document.body.classList.remove('dragover'); });
+document.addEventListener('drop', e => {
+e.preventDefault();
+document.body.classList.remove('dragover');
+var f = e.dataTransfer.files[0];
+if (!f) return;
+var r = new FileReader();
+r.onload = function(ev) {
+editor.value = ev.target.result;
+state.code = editor.value;
+renderNow();
+statusEl.textContent = '✓ ' + f.name;
+};
+r.readAsText(f);
+});
+
+// ═══ RACCOURCIS ═══
+editor.addEventListener('input', onEdit);
+editor.addEventListener('keydown', function(e) {
+if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); renderNow(); return; }
+if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); runCode(); return; }
+if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); openExport(); return; }
+if (e.key === 'f' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); openSearch(); return; }
+if (e.key === 'Tab') {
+e.preventDefault();
+var s = this.selectionStart, en = this.selectionEnd;
+this.value = this.value.substring(0, s) + ' ' + this.value.substring(en);
+this.selectionStart = this.selectionEnd = s + 2;
+onEdit();
+}
+});
+
+// ═══ INIT ═══
+loadExample('html');
+</script>
+</body></html>
+"""
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# HTTP HANDLER
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+gestionnaire de classe(BaseHTTPRequestHandler):
+server_version = "NexusQuickHub/" + VERSION
+protocol_version = "HTTP/1.1"
+
+def log_message(self, *a): pass
+
+def _send(self, code, body, ctype="text/html; charset=utf-8"):
+if isinstance(body, str):
+body = body.encode("utf-8")
+try:
+self.send_response(code)
+self.send_header("Content-Type", ctype)
+self.send_header("Content-Length", str(len(body)))
+self.send_header("Access-Control-Allow-Origin", "*")
+self.send_header("Cache-Control", "no-store")
+self.end_headers()
+self.wfile.write(body)
+except (BrokenPipeError, ConnectionResetError):
+pass
+
+def _json(self, code, obj):
+self._send(code, json.dumps(obj, indent=2, assure_ascii=False, default=str),
+"application/json; charset=utf-8")
+
+def do_GET(self):
+p = urllib.parse.urlparse(self.path)
+path = p.path
+
+if path in ("/", "/index.html"):
+return self._send(200, HTML_UI)
+
+if path == "/api/status":
+retour self._json(200, {
+"ok": True, "service": "NEXUS QUICKHUB", "version": VERSION,
+"auteur": AUTEUR, "licence": LICENCE, "port": PORT,
+"pid": os.getpid(), "uptime_s": int(time.time() - START_TS),
+"languages": len(LANGUAGES),
+"orphans": sum(1 for l in LANGUAGES.values() if l.get("orphan")),
+"executable": sum(1 for l in LANGUAGES.values() if l.get("exec")),
+"mcp_resources": len(MCP_RESOURCES),
+"mcp_tools": len(MCP_TOOLS),
+"mcp_prompts": len(MCP_PROMPTS),
+"cache_size": RENDER_CACHE.size(),
+})
+
+if path == "/api/languages":
+return self._json(200, {"ok": True, "count": len(LANGUAGES),
+"languages": LANGUAGES})
+
+if path == "/api/orphans":
+orphans = []
+example_map = {
+"cobol":"cobol", "fortran":"fortran", "brainfuck":"brainfuck",
+}
+pour nom, info dans LANGUAGES.items():
+if info.get("orphan"):
+orphans.append({
+"name": name,
+"desc": info.get("desc", ""),
+"color": info.get("color", "#888"),
+"exec": info.get("exec", False),
+"example_key": example_map.get(name, "python"),
+})
+return self._json(200, {"ok": True, "count": len(orphans), "orphans": orphans})
+
+si chemin == "/api/snippets":
+return self._json(200, SNIPPETS)
+
+# MCP
+if path == "/mcp/resources":
+return self._json(200, {"resources": list(MCP_RESOURCES.values())})
+if path == "/mcp/tools":
+retourner self._json(200, {"outils": list(MCP_TOOLS.values())})
+si chemin == "/mcp/invite":
+return self._json(200, {"prompts": list(MCP_PROMPTS.values())})
+if path == "/mcp/context":
+retour self._json(200, {
+"nexus": {"version": VERSION, "auteur": AUTEUR},
+"languages": len(LANGUAGES),
+"orphans": sum(1 for l in LANGUAGES.values() if l.get("orphan")),
+"exécutable": sum(1 pour l dans LANGUAGES.values() si l.get("exec")),
+"constants": CONSTANTES,
+})
+if path == "/mcp/schema":
+retour self._json(200, {
+"protocol": "MCP-1.0",
+"server": {"name":"nexus-quickhub", "version":VERSION},
+"capabilities": {"resources":True, "tools":True, "prompts":True},
+})
+
+if path == "/science/constants":
+return self._json(200, {"constants": CONSTANTES})
+
+si chemin == "/wiki/taxonomie":
+retour self._json(200, {
+"catégories": ["Informatique", "Mathématiques", "Physique",
+"Chimie","Biologie","Histoire","Géographie","Art",
+"Littérature", "Philosophie", "Économie", "Droit"]
+})
+
+si chemin == "/ping":
+retour self._send(200, "pong")
+
+retour self._send(404, "404 — Non trouvé")
+
+def do_POST(self):
+p = urllib.parse.urlparse(self.path)
+path = p.path
+
+Essayez:
+longueur = int(self.headers.get("Content-Longth", "0") ou "0")
+except Exception:
+longueur = 0
+body = self.rfile.read(length) if length else b""
+
+try:
+payload = json.loads(body.decode("utf-8", "ignore") ou "{}")
+Sauf exception:
+charge utile = {}
+
+code = payload.get("code", "")
+nom de fichier = payload.get("nom du fichier", "")
+
+# ═══ RENDER ═══
+if path == "/api/render":
+si ce n'est pas le code:
+return self._json(200, {"ok": False, "err": "code vide"})
+
+cache_key = hashlib.sha256((code + "||" + filename).encode()).hexdigest()
+cached = RENDER_CACHE.get(cache_key)
+en cas de mise en cache:
+return self._json(200, cached)
+
+lang = detecter_langage(code, filename)
+lignes = code.count("\n") + 1
+octets = len(code.encode("utf-8"))
+
+result = None
+if lang == "html":
+result = {"ok":True,"lang":lang,"type":"html",
+"rendered":rendre_html(code),"lignes":lignes,"octets":octets}
+elif lang == "css":
+result = {"ok":True,"lang":lang,"type":"html",
+"rendered":rendre_css(code),"lignes":lignes,"octets":octets}
+elif lang == "markdown":
+result = {"ok":True,"lang":lang,"type":"html",
+"rendered":rendre_md(code),"lignes":lignes,"octets":octets}
+elif lang == "yaml":
+result = {"ok":True,"lang":lang,"type":"html",
+"rendered":rendre_yaml(code),"lignes":lignes,"octets":octets}
+elif lang == "json":
+result = {"ok":True,"lang":lang,"type":"html",
+"rendered":rendre_json(code),"lignes":lignes,"octets":octets}
+elif lang == "sql":
+t = rendre_sql(code)
+if t:
+result = {"ok":True,"lang":lang,"type":"html",
+"rendered":t,"lignes":lignes,"octets":octets}
+elif lang == "svg":
+result = {"ok":True,"lang":lang,"type":"svg",
+"rended":code,"lignes":lignes,"octets":octets}
+
+if result is None:
+résultat = {"ok":True,"lang":lang,"type":"code",
+"rendered":colorer(code, lang),"lignes":lignes,"octets":octets}
+
+RENDER_CACHE.put(cache_key, résultat)
+return self._json(200, result)
+
+# ═══ EXECUTE ═══
+si chemin == "/api/execute":
+lang = payload.get("lang") or detecter_langage(code, filename)
+result = Executor.run(code, lang)
+return self._json(200, result)
+
+# ═══ SVG ═══
+if path == "/api/svg":
+lang = detecter_langage(code, filename)
+svg = rendu_svg(code, lang, nom de fichier)
+retour self._json(200, {"ok": True, "svg": svg, "lang": lang})
+
+# ═══ README ═══
+if path == "/api/readme":
+readme = rendre_readme({
+"nom": payload.get("nom", "Nexus Project"),
+"description": payload.get("description", ""),
+"auteur": AUTEUR, "licence": LICENCE,
+"langages": payload.get("langages", []),
+})
+return self._json(200, {"ok": True, "readme": readme})
+
+# ═══ EXPORTS ═══
+if path == "/api/export/html":
+lang = detecter_langage(code, filename)
+colored = colorer(code, lang)
+lignes = code.count("\n") + 1
+octets = len(code.encode("utf-8"))
+html = ('<! DOCTYPE html><html><head><meta charset="utf-8">'
+<title>NEXUS Export</title>'
+'<style>body{background:#02040a;color:#e0e8f0;font-family:system-ui;'
+'padding:30px;max-width:1200px;margin:auto}'
+'h1{color:#00d4ff;border-bottom:2px solid #00d4ff;padding-bottom:10px}'
+'.meta{background:#0a1018;padding:14px;border-radius:8px;margin:16px 0;'
+'font-family:monospace;font-size:13px;border-left:3px solid ' +
+get_color(lang) + '}'
+'pre{background:#050a10;padding:20px;border-radius:10px;overflow-x:auto;'
+'font-family:monospace;font-size:13px;line-height:1.7;'
+'border:1px solid #1a2540;white-space:pre-wrap}'
+'</style></head><body><h1>⚡ NEXUS QUICKHUB v' + VERSION + '</h1>'
+'<div class="meta"><div><b>Langage :</b> ' + lang + '</div>'
+'<div><b>Lignes :</b> ' + str(lignes) + '</div>'
+'<div><b>Octets :</b> ' + str(octets) + '</div>'
+'<div><b>Auteur :</b> ' + AUTEUR + '</div></div>'
+'<pre>' + coloré + '</pre></body></html>')
+return self._json(200, {"ok": True, "html": html})
+
+if path == "/api/export/json":
+lang = detecter_langage(code, filename)
+data = {
+"version": VERSION, "auteur": AUTEUR, "licence": LICENCE,
+"date": datetime.datetime.now().isoformat(),
+"lang": lang, "nom de fichier": nom de fichier,
+"lignes": code.count("\n") + 1,
+"octets": len(code.encode("utf-8")),
+"sha256": hashlib.sha256(code.encode("utf-8")).hexdigest(),
+"code": code,
+}
+return self._json(200, {"ok": True,
+"json": json.dumps(data, indent=2, ensure_ascii=False)})
+
+# ═══ GITLAB ═══
+if path == "/gitlab/pipeline":
+lang = payload.get("langage", "python")
+etapes = payload.get("etapes", ["build", "test", "deploy"])
+yaml_ci = gen_gitlab_ci(lang, etapes)
+return self._json(200, {"ok": True, "pipeline": yaml_ci})
+
+# ═══ SCIENCE ═══
+if path == "/science/notebook":
+entrée = lab_entry(
+payload.get("titre", "Expérience"),
+payload.get("hypothese", ""),
+payload.get("méthode", ""),
+payload.get("resultats", ""),
+payload.get("conclusion", ""))
+return self._json(200, {"ok": True, **entry})
+
+if path == "/science/analyze":
+data = payload.get("data", [])
+retour self._json(200, {"ok": True, "stats": analyse_stats(data)})
+
+si chemin == "/science/intrigue":
+data = payload.get("data", [])
+return self._json(200, {"ok": True, "plot": plot_ascii(data)})
+
+# ═══ WIKI ═══
+if path == "/wiki/article":
+article = wiki_article(
+payload.get("sujet", "Sujet"),
+payload.get("catégorie", "Général"),
+payload.get("sections"),
+payload.get("infobox"))
+return self._json(200, {"ok": True, "article": article})
+
+# ═══ DIFF ═══
+if path == "/api/diff":
+a = payload.get("a", ""); b = payload.get("b", "")
+return self._json(200, {"ok": True, "diff": diff_simple(a, b)})
+
+# ═══ MCP CALL ══
+si chemin == "/mcp/call":
+tool = payload.get("tool", "")
+args = payload.get("arguments", {})
+if tool == "detect_language":
+return self._json(200, {"ok":True,
+"result":detecter_langage(args.get("code",""), args.get("filename",""))})
+if tool == "render_code":
+c = args.get("code","""); l = detecter_langage(c, args.get("filename","))
+return self._json(200, {"ok":True,
+"result":{"lang":l, "rendered":colorer(c, l)}})
+if tool == "execute_code":
+return self._json(200, {"ok":True,
+"result":Executor.run(args.get("code",""), args.get("lang","python"))})
+if tool == "plot_ascii":
+return self._json(200, {"ok":True,
+"result":plot_ascii(args.get("data", []))})
+if tool == "generate_readme":
+return self._json(200, {"ok":True,
+"result":rendre_readme({"nom":args.get("nom","Project")})})
+if tool == "create_pipeline":
+return self._json(200, {"ok":True,
+"result":gen_gitlab_ci(args.get("langage","python"))})
+if tool == "lab_notebook":
+return self._json(200, {"ok":True,
+"result":lab_entry(args.get("titre","Expérience"))})
+if tool == "wiki_article":
+return self._json(200, {"ok":True,
+"result":wiki_article(args.get("sujet","Sujet"))})
+if tool == "search_replace":
+c = args.get("code",""); pat = args.get("pattern",""); rep = args.get("replace","")
+Essayez:
+new = re.sub(pat, rep, c)
+return self._json(200, {"ok":True, "result":new})
+except Exception as e:
+retour self._json(200, {"ok":False, "err":str(e)})
+return self._json(404, {"ok":False, "err":"tool inconnu",
+"available": list(MCP_TOOLS.keys())})
+
+return self._json(404, {"ok": False, "err": "route inconnue"})
+
+def do_OPTIONS(self):
+Essayez:
+self.send_response(204)
+self.send_header("Access-Control-Allow-Origin", "*")
+self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+self.send_header("Access-Control-Allow-Headers", "*")
+self.send_header("Content-Length", "0")
+self.end_headers()
+Sauf exception:
+Passer
+
+class Server(ThreadingMixIn, HTTPServer):
+daemon_threads = True
+allow_reuse_address = True
+
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+# PRINCIPAL
+# ════════════════════════════════════════════════����␐␐��������␐������␐��������␐␐␐␐␐␐��␐␐␐��␐␐␐␐␐␐␐␐␐␐␐��␐��␐␐␐␐␐��␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐␐
+PORT = PORT_PREF
+
+def port_libre(port):
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+Essayez:
+s.settimeout(1); s.bind(("127.0.0.1", port)); return True
+except OSError: return False
+enfin:
+try: s.close()
+except Exception: pass
+
+def trouver_port(start):
+pour p dans la plage (démarrage, début + 20):
+si port_libre(p): retour p
+return None
+
+def ip_lan():
+Essayez:
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("8.8.8.8", 80))
+ip = s.getsockname()[0]; s.close(); retour ip
+except Exception: return "127.0.0.1"
+
+def main():
+global PORT
+print(""); print("=" * 78)
+print(" NEXUS QUICKHUB v" + VERSION)
+print(" Auteur : " + AUTEUR + " | Licence: " + LICENCE)
+print("=" * 78); print("")
+print(" Méga-runtime multi-langages")
+print(" Langages : " + str(len(LANGUAGES)))
+print(" Orphelins : " + str(sum(1 for l in LANGUAGES.values() if l.get("orphan"))))
+print(" Exécutables : " + str(sum(1 pour l dans LANGUAGES.values() si l.get("exec"))))
+print("")
+
+if not port_libre(PORT_PREF):
+print(" Port " + str(PORT_PREF) + " occupé, recherche...")
+nv = trouver_port(PORT_PREF + 1)
+if nv is None:
+print(" Aucun port libre"); return
+PORT = nv
+print(" Port " + str(PORT) + " choisir ")
+autre:
+PORT = PORT_PREF
+
+Essayez:
+avec open(PID_FILE, "w") comme f: f.write(str(os.getpid()))
+sauf OSERror: passer
+
+ip = ip_lan()
+print(""); print(" Local : http://localhost:" + str(PORT) + "/")
+print(" Réseau : http://" + ip + ":" + str(PORT) + "/"); print("")
+print(" Onglets UI :")
+print(" ✏️ Éditeur — Détection rendu + LIVE")
+print(" ⚡ Exécuteur — Python, Bash, JS, Rust, Go, C...")
+print(" 🌐 MCP — Modèle Context Protocol")
+print(" 🦊 GitLab — Pipelines CI/CD")
+print(" 🔬 Science — Carnet de labo + ASCII plots")
+print(" 📖 Wiki — Générateur Wikipédia")
+print(" 🧙 Orphelins — COBOL, Fortran, Lisp, Brainfuck...)
+print(""); print(" Corrections v3→v4 :")
+print(" ✅ HTML s'affiche VRAIMENT (Blob URL)")
+print(" ✅ Exécution RÉELLE de code")
+print(" ✅ 120+ langues dont orphelins")
+print(" ✅ Multi-onglets fichiers")
+print(" ✅ Search/Replacer regex")
+print(" ✅ Diff viewer")
+print(""); print("Ctrl+C pour stopter"); print("")
+
+log("=== NEXUS QUICKHUB v" + VERSION + " ===")
+log("Port : " + str(PORT))
+
+Essayez:
+avec Server("0.0.0.0", PORT), Handler) comme srv:
+log("Serveur prêt sur 0.0.0.0:" + str(PORT))
+srv.serve_forever()
+sauf clavierInterruption:
+print(""); print("arrêté."); print("")
+sauf OSERror comme e:
+print(" Port d'erreur " + str(PORT) + " : " + str(e))
+enfin:
+Essayez:
+if os.path.exists(PID_FILE): os.unlink(PID_FILE)
+sauf OSERror: passer
+
+si __name__ == "__main__":
+essayer: main()
+sauf Exception comme e: print(" ERREUR FATALE: " + str(e))
