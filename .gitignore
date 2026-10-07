@@ -4,3 +4,62 @@ composer.phar
 # Commit your application's lock file https://getcomposer.org/doc/01-basic-usage.md#commit-your-composer-lock-file-to-version-control
 # You may choose to ignore a library lock file http://getcomposer.org/doc/02-libraries.md#lock-file
 # composer.lock
+<!-- ════ PRIMARY SEO ════ -->
+<title>NEXUS Code Studio — Éditeur Local Python Zéro Dépendance | DGK</title>
+<meta name="description"
+  content="NEXUS Code Studio : éditeur de code local, 30 langages, aperçu live HTML/CSS/JS, exécution Python/Bash, générateur SVG. Un seul fichier Python. Zéro dépendance. Fonctionne offline.">
+<meta name="keywords"
+  content="éditeur code local, python éditeur, live preview html, code studio offline, nexus dgk, aissa mohammedi, zero dependency editor, bash executor, svg code image">
+<meta name="author" content="Aissa Mohammedi (DGK)">
+<meta name="robots" content="index, follow">
+<meta name="language" content="fr, en">
+<link rel="canonical" href="https://github.com/Aissamohammedi88/nexus-code-studio">
+
+<!-- ════ OPEN GRAPH (LinkedIn / Facebook) ════ -->
+<meta property="og:type"        content="website">
+<meta property="og:title"       content="NEXUS Code Studio — Zero Dependency Local Code Editor">
+<meta property="og:description" content="One Python file. 30 languages. Live preview. No npm. No pip. No cloud.">
+<meta property="og:url"         content="https://github.com/Aissamohammedi88/nexus-code-studio">
+<meta property="og:image"       content="https://raw.githubusercontent.com/Aissamohammedi88/nexus-code-studio/main/preview.png">
+<meta property="og:image:width"  content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale"      content="fr_CA">
+<meta property="og:site_name"   content="NEXUS by DGK">
+
+<!-- ════ TWITTER CARD ════ -->
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="NEXUS Code Studio — 1 file. 30 languages. Zero deps.">
+<meta name="twitter:description" content="Local code editor with live HTML preview, Python/Bash execution, SVG export. Pure stdlib.">
+<meta name="twitter:image"       content="https://raw.githubusercontent.com/Aissamohammedi88/nexus-code-studio/main/preview.png">
+<meta name="twitter:creator"     content="@AissaDGK">
+
+<!-- ════ SCHEMA.ORG (Google Rich Results) ════ -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "NEXUS Code Studio",
+  "version": "1.0.0",
+  "description": "Local code editor. Zero dependencies. 30 languages. Live preview.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS, Windows, Android, iOS",
+  "author": {
+    "@type": "Person",
+    "name": "Aissa Mohammedi",
+    "url": "https://ca.linkedin.com/in/aissa-mohammedi-2308743b2"
+  },
+  "license": "https://github.com/Aissamohammedi88/nexus-code-studio/blob/main/LICENSE",
+  "url": "https://github.com/Aissamohammedi88/nexus-code-studio",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
+
+<!-- ════ PERFORMANCE ════ -->
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#02040a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
